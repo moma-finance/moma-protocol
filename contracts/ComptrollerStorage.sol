@@ -111,9 +111,6 @@ contract ComptrollerV3Storage is ComptrollerV2Storage {
     /// @notice A list of all markets
     CToken[] public allMarkets;
 
-    /// @notice The rate at which the flywheel distributes COMP, per block
-    uint public compRate;
-
     /// @notice The portion of compRate that each market currently receives
     mapping(address => uint) public compSpeeds;
 
@@ -142,9 +139,20 @@ contract ComptrollerV4Storage is ComptrollerV3Storage {
 }
 
 contract ComptrollerV5Storage is ComptrollerV4Storage {
-    /// @notice The portion of COMP that each contributor receives per block
-    mapping(address => uint) public compContributorSpeeds;
+    // struct TokenFarmState {
+    //     /// @notice The farm token's address
+    //     EIP20Interface token;
 
-    /// @notice Last block at which a contributor's COMP rewards have been allocated
-    mapping(address => uint) public lastContributorBlock;
+    //     /// @notice The block number to start to farm this token
+    //     uint32 startBlock;
+
+    //     /// @notice The block number to stop farming
+    //     uint32 endBlock;
+    // }
+    EIP20Interface public farmToken;
+    uint32 public startBlock;
+    uint32 public endBlock;
+    /// @notice The token farm state
+    // TokenFarmState public farmState;
+    // mapping(address => TokenFarmState) public farmState;
 }

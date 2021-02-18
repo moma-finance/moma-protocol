@@ -6,13 +6,12 @@ import "./PriceOracle.sol";
 import "./ComptrollerInterface.sol";
 import "./ComptrollerStorage.sol";
 import "./Unitroller.sol";
-import "./Governance/Comp.sol";
 
 /**
  * @title Compound's Comptroller Contract
  * @author Compound
  */
-contract Comptroller is ComptrollerV5Storage, ComptrollerInterface, ComptrollerErrorReporter, ExponentialNoError {
+contract Comptroller is ComptrollerInterface, ComptrollerV5Storage, ComptrollerErrorReporter, ExponentialNoError {
     /// @notice Emitted when an admin supports a market
     event MarketListed(CToken cToken);
 
@@ -46,9 +45,6 @@ contract Comptroller is ComptrollerV5Storage, ComptrollerInterface, ComptrollerE
     /// @notice Emitted when a new COMP speed is calculated for a market
     event CompSpeedUpdated(CToken indexed cToken, uint newSpeed);
 
-    /// @notice Emitted when a new COMP speed is set for a contributor
-    event ContributorCompSpeedUpdated(address indexed contributor, uint newSpeed);
-
     /// @notice Emitted when COMP is distributed to a supplier
     event DistributedSupplierComp(CToken indexed cToken, address indexed supplier, uint compDelta, uint compSupplyIndex);
 
@@ -63,6 +59,12 @@ contract Comptroller is ComptrollerV5Storage, ComptrollerInterface, ComptrollerE
 
     /// @notice Emitted when COMP is granted by admin
     event CompGranted(address recipient, uint amount);
+
+    /// @notice Emitted when farm token is added by admin
+    event FarmTokenAdded(address token, uint start, uint end);
+
+    /// @notice Emitted when farm token is updated by admin
+    event FarmTokenUpdated(address oldToken, address newToken, uint start, uint end);
 
     /// @notice The initial COMP index for a market
     uint224 public constant compInitialIndex = 1e36;
@@ -1051,7 +1053,7 @@ contract Comptroller is ComptrollerV5Storage, ComptrollerInterface, ComptrollerE
         return msg.sender == admin || msg.sender == comptrollerImplementation;
     }
 
-    /*** Comp Distribution ***/
+    /*** Token Farming ***/
 
     /**
      * @notice Set COMP speed for a single market
@@ -1059,6 +1061,7 @@ contract Comptroller is ComptrollerV5Storage, ComptrollerInterface, ComptrollerE
      * @param compSpeed New COMP speed for market
      */
     function setCompSpeedInternal(CToken cToken, uint compSpeed) internal {
+        require(address(farmToken) != address(0), "farm token is not added");
         uint currentCompSpeed = compSpeeds[address(cToken)];
         if (currentCompSpeed != 0) {
             // note that COMP speed could be set to 0 to halt liquidity rewards for a market
@@ -1073,14 +1076,14 @@ contract Comptroller is ComptrollerV5Storage, ComptrollerInterface, ComptrollerE
             if (compSupplyState[address(cToken)].index == 0 && compSupplyState[address(cToken)].block == 0) {
                 compSupplyState[address(cToken)] = CompMarketState({
                     index: compInitialIndex,
-                    block: safe32(getBlockNumber(), "block number exceeds 32 bits")
+                    block: startBlock
                 });
             }
 
             if (compBorrowState[address(cToken)].index == 0 && compBorrowState[address(cToken)].block == 0) {
                 compBorrowState[address(cToken)] = CompMarketState({
                     index: compInitialIndex,
-                    block: safe32(getBlockNumber(), "block number exceeds 32 bits")
+                    block: startBlock
                 });
             }
         }
@@ -1096,21 +1099,23 @@ contract Comptroller is ComptrollerV5Storage, ComptrollerInterface, ComptrollerE
      * @param cToken The market whose supply index to update
      */
     function updateCompSupplyIndex(address cToken) internal {
-        CompMarketState storage supplyState = compSupplyState[cToken];
-        uint supplySpeed = compSpeeds[cToken];
         uint blockNumber = getBlockNumber();
-        uint deltaBlocks = sub_(blockNumber, uint(supplyState.block));
-        if (deltaBlocks > 0 && supplySpeed > 0) {
-            uint supplyTokens = CToken(cToken).totalSupply();
-            uint compAccrued = mul_(deltaBlocks, supplySpeed);
-            Double memory ratio = supplyTokens > 0 ? fraction(compAccrued, supplyTokens) : Double({mantissa: 0});
-            Double memory index = add_(Double({mantissa: supplyState.index}), ratio);
-            compSupplyState[cToken] = CompMarketState({
-                index: safe224(index.mantissa, "new index exceeds 224 bits"),
-                block: safe32(blockNumber, "block number exceeds 32 bits")
-            });
-        } else if (deltaBlocks > 0) {
-            supplyState.block = safe32(blockNumber, "block number exceeds 32 bits");
+        if (blockNumber > uint(startBlock) && blockNumber <= uint(endBlock)) {
+            CompMarketState storage supplyState = compSupplyState[cToken];
+            uint supplySpeed = compSpeeds[cToken];
+            uint deltaBlocks = sub_(blockNumber, uint(supplyState.block));
+            if (deltaBlocks > 0 && supplySpeed > 0) {
+                uint supplyTokens = CToken(cToken).totalSupply();
+                uint compAccrued = mul_(deltaBlocks, supplySpeed);
+                Double memory ratio = supplyTokens > 0 ? fraction(compAccrued, supplyTokens) : Double({mantissa: 0});
+                Double memory index = add_(Double({mantissa: supplyState.index}), ratio);
+                compSupplyState[cToken] = CompMarketState({
+                    index: safe224(index.mantissa, "new index exceeds 224 bits"),
+                    block: safe32(blockNumber, "block number exceeds 32 bits")
+                });
+            } else if (deltaBlocks > 0) {
+                supplyState.block = safe32(blockNumber, "block number exceeds 32 bits");
+            }
         }
     }
 
@@ -1119,21 +1124,23 @@ contract Comptroller is ComptrollerV5Storage, ComptrollerInterface, ComptrollerE
      * @param cToken The market whose borrow index to update
      */
     function updateCompBorrowIndex(address cToken, Exp memory marketBorrowIndex) internal {
-        CompMarketState storage borrowState = compBorrowState[cToken];
-        uint borrowSpeed = compSpeeds[cToken];
         uint blockNumber = getBlockNumber();
-        uint deltaBlocks = sub_(blockNumber, uint(borrowState.block));
-        if (deltaBlocks > 0 && borrowSpeed > 0) {
-            uint borrowAmount = div_(CToken(cToken).totalBorrows(), marketBorrowIndex);
-            uint compAccrued = mul_(deltaBlocks, borrowSpeed);
-            Double memory ratio = borrowAmount > 0 ? fraction(compAccrued, borrowAmount) : Double({mantissa: 0});
-            Double memory index = add_(Double({mantissa: borrowState.index}), ratio);
-            compBorrowState[cToken] = CompMarketState({
-                index: safe224(index.mantissa, "new index exceeds 224 bits"),
-                block: safe32(blockNumber, "block number exceeds 32 bits")
-            });
-        } else if (deltaBlocks > 0) {
-            borrowState.block = safe32(blockNumber, "block number exceeds 32 bits");
+        if (blockNumber > uint(startBlock) && blockNumber <= uint(endBlock)) {
+            CompMarketState storage borrowState = compBorrowState[cToken];
+            uint borrowSpeed = compSpeeds[cToken];
+            uint deltaBlocks = sub_(blockNumber, uint(borrowState.block));
+            if (deltaBlocks > 0 && borrowSpeed > 0) {
+                uint borrowAmount = div_(CToken(cToken).totalBorrows(), marketBorrowIndex);
+                uint compAccrued = mul_(deltaBlocks, borrowSpeed);
+                Double memory ratio = borrowAmount > 0 ? fraction(compAccrued, borrowAmount) : Double({mantissa: 0});
+                Double memory index = add_(Double({mantissa: borrowState.index}), ratio);
+                compBorrowState[cToken] = CompMarketState({
+                    index: safe224(index.mantissa, "new index exceeds 224 bits"),
+                    block: safe32(blockNumber, "block number exceeds 32 bits")
+                });
+            } else if (deltaBlocks > 0) {
+                borrowState.block = safe32(blockNumber, "block number exceeds 32 bits");
+            }
         }
     }
 
@@ -1148,16 +1155,20 @@ contract Comptroller is ComptrollerV5Storage, ComptrollerInterface, ComptrollerE
         Double memory supplierIndex = Double({mantissa: compSupplierIndex[cToken][supplier]});
         compSupplierIndex[cToken][supplier] = supplyIndex.mantissa;
 
-        if (supplierIndex.mantissa == 0 && supplyIndex.mantissa > 0) {
-            supplierIndex.mantissa = compInitialIndex;
+        if (supplyIndex.mantissa > 0) {
+            if (supplierIndex.mantissa == 0 || supplierIndex.mantissa > supplyIndex.mantissa) {
+                supplierIndex.mantissa = compInitialIndex;
+            }
         }
 
-        Double memory deltaIndex = sub_(supplyIndex, supplierIndex);
-        uint supplierTokens = CToken(cToken).balanceOf(supplier);
-        uint supplierDelta = mul_(supplierTokens, deltaIndex);
-        uint supplierAccrued = add_(compAccrued[supplier], supplierDelta);
-        compAccrued[supplier] = supplierAccrued;
-        emit DistributedSupplierComp(CToken(cToken), supplier, supplierDelta, supplyIndex.mantissa);
+        if (supplyIndex.mantissa > supplierIndex.mantissa) {
+            Double memory deltaIndex = sub_(supplyIndex, supplierIndex);
+            uint supplierTokens = CToken(cToken).balanceOf(supplier);
+            uint supplierDelta = mul_(supplierTokens, deltaIndex);
+            uint supplierAccrued = add_(compAccrued[supplier], supplierDelta);
+            compAccrued[supplier] = supplierAccrued;
+            emit DistributedSupplierComp(CToken(cToken), supplier, supplierDelta, supplyIndex.mantissa);
+        }
     }
 
     /**
@@ -1172,30 +1183,18 @@ contract Comptroller is ComptrollerV5Storage, ComptrollerInterface, ComptrollerE
         Double memory borrowerIndex = Double({mantissa: compBorrowerIndex[cToken][borrower]});
         compBorrowerIndex[cToken][borrower] = borrowIndex.mantissa;
 
-        if (borrowerIndex.mantissa > 0) {
+        // when updated farm token, borrowerIndex should be set to initial
+        if (borrowerIndex.mantissa > borrowIndex.mantissa) {
+            borrowerIndex.mantissa = compInitialIndex;
+        }
+
+        if (borrowerIndex.mantissa > 0 && borrowIndex.mantissa > borrowerIndex.mantissa) {
             Double memory deltaIndex = sub_(borrowIndex, borrowerIndex);
             uint borrowerAmount = div_(CToken(cToken).borrowBalanceStored(borrower), marketBorrowIndex);
             uint borrowerDelta = mul_(borrowerAmount, deltaIndex);
             uint borrowerAccrued = add_(compAccrued[borrower], borrowerDelta);
             compAccrued[borrower] = borrowerAccrued;
             emit DistributedBorrowerComp(CToken(cToken), borrower, borrowerDelta, borrowIndex.mantissa);
-        }
-    }
-
-    /**
-     * @notice Calculate additional accrued COMP for a contributor since last accrual
-     * @param contributor The address to calculate contributor rewards for
-     */
-    function updateContributorRewards(address contributor) public {
-        uint compSpeed = compContributorSpeeds[contributor];
-        uint blockNumber = getBlockNumber();
-        uint deltaBlocks = sub_(blockNumber, lastContributorBlock[contributor]);
-        if (deltaBlocks > 0 && compSpeed > 0) {
-            uint newAccrued = mul_(deltaBlocks, compSpeed);
-            uint contributorAccrued = add_(compAccrued[contributor], newAccrued);
-
-            compAccrued[contributor] = contributorAccrued;
-            lastContributorBlock[contributor] = blockNumber;
         }
     }
 
@@ -1255,16 +1254,82 @@ contract Comptroller is ComptrollerV5Storage, ComptrollerInterface, ComptrollerE
      * @return The amount of COMP which was NOT transferred to the user
      */
     function grantCompInternal(address user, uint amount) internal returns (uint) {
-        Comp comp = Comp(getCompAddress());
-        uint compRemaining = comp.balanceOf(address(this));
+        uint compRemaining = farmToken.balanceOf(address(this));
         if (amount > 0 && amount <= compRemaining) {
-            comp.transfer(user, amount);
+            farmToken.transfer(user, amount);
             return 0;
         }
         return amount;
     }
 
     /*** Comp Distribution Admin ***/
+
+    /**
+      * @notice Add erc20 token to farm
+      * @dev Admin function to add token
+      * @param token Token to add for farming
+      * @param start Block heiht to start to farm this token
+      * @param end Block heiht to stop farming
+      * @return uint 0=success, otherwise a failure
+      */
+    function _addTokenFarming(EIP20Interface token, uint start, uint end) external returns (uint) {
+        // Check caller is admin
+    	require(msg.sender == admin, "only admin can add token to farm");
+        // require(farmState[address(token)].startBlock == 0, "token exist");
+        require(start > getBlockNumber(), "startBlock too small");
+        require(end > start, "endBlock less than startBlock");
+
+        farmToken = token;
+        startBlock = safe32(start, "start block number exceeds 32 bits");
+        endBlock = safe32(end, "end block number exceeds 32 bits");
+        emit FarmTokenAdded(address(token), start, end);
+
+        return uint(Error.NO_ERROR);
+    }
+
+    /**
+      * @notice Update erc20 token to farm
+      * @dev Admin function to update token farm
+      * @param token Token to update for farming
+      * @param start Block heiht to start to farm this token
+      * @param end Block heiht to stop farming
+      * @return uint 0=success, otherwise a failure
+      */
+    function _updateTokenFarming(EIP20Interface token, uint start, uint end) external returns (uint) {
+        // Check caller is admin
+    	require(msg.sender == admin, "only admin can update farm token");
+        // require(farmState[address(token)].startBlock == 0, "token exist");
+        require(start > getBlockNumber(), "startBlock too small");
+        require(end > start, "endBlock less than startBlock");
+
+        uint compRemaining = farmToken.balanceOf(address(this));
+        if (compRemaining > 0) {
+            farmToken.transfer(admin, compRemaining);
+        }
+
+        address oldToken = address(token);
+        farmToken = token;
+        startBlock = safe32(start, "start block number exceeds 32 bits");
+        endBlock = safe32(end, "end block number exceeds 32 bits");
+        
+        for (uint i = 0; i < allMarkets.length; i++) {
+            address market = address(allMarkets[i]);
+            if (compSpeeds[market] != 0) {
+                compSupplyState[market] = CompMarketState({
+                    index: compInitialIndex,
+                    block: startBlock
+                });
+                compBorrowState[market] = CompMarketState({
+                    index: compInitialIndex,
+                    block: startBlock
+                });
+            }
+        }
+
+        emit FarmTokenUpdated(oldToken, address(token), start, end);
+
+        return uint(Error.NO_ERROR);
+    }
 
     /**
      * @notice Transfer COMP to the recipient
@@ -1290,27 +1355,6 @@ contract Comptroller is ComptrollerV5Storage, ComptrollerInterface, ComptrollerE
     }
 
     /**
-     * @notice Set COMP speed for a single contributor
-     * @param contributor The contributor whose COMP speed to update
-     * @param compSpeed New COMP speed for contributor
-     */
-    function _setContributorCompSpeed(address contributor, uint compSpeed) public {
-        require(adminOrInitializing(), "only admin can set comp speed");
-
-        // note that COMP speed could be set to 0 to halt liquidity rewards for a contributor
-        updateContributorRewards(contributor);
-        if (compSpeed == 0) {
-            // release storage
-            delete lastContributorBlock[contributor];
-        } else {
-            lastContributorBlock[contributor] = getBlockNumber();
-        }
-        compContributorSpeeds[contributor] = compSpeed;
-
-        emit ContributorCompSpeedUpdated(contributor, compSpeed);
-    }
-
-    /**
      * @notice Return all of the markets
      * @dev The automatic getter may be used to access an individual market.
      * @return The list of market addresses
@@ -1321,13 +1365,5 @@ contract Comptroller is ComptrollerV5Storage, ComptrollerInterface, ComptrollerE
 
     function getBlockNumber() public view returns (uint) {
         return block.number;
-    }
-
-    /**
-     * @notice Return the address of the COMP token
-     * @return The address of COMP
-     */
-    function getCompAddress() public view returns (address) {
-        return 0xc00e94Cb662C3520282E6f5717214004A7f26888;
     }
 }
