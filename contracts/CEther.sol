@@ -17,6 +17,8 @@ contract CEther is CToken {
      * @param symbol_ ERC-20 symbol of this token
      * @param decimals_ ERC-20 decimal precision of this token
      * @param admin_ Address of the administrator of this token
+     * @param feeAdmin_ Address of the fee administrator of this token
+     * @param feeReceiver_ Address of the free receiver of this token
      */
     constructor(ComptrollerInterface comptroller_,
                 InterestRateModel interestRateModel_,
@@ -24,11 +26,13 @@ contract CEther is CToken {
                 string memory name_,
                 string memory symbol_,
                 uint8 decimals_,
-                address payable admin_) public {
+                address payable admin_,
+                address payable feeAdmin_,
+                address payable feeReceiver_) public {
         // Creator of the contract is admin during initialization
         admin = msg.sender;
 
-        initialize(comptroller_, interestRateModel_, initialExchangeRateMantissa_, name_, symbol_, decimals_);
+        initialize(comptroller_, interestRateModel_, initialExchangeRateMantissa_, name_, symbol_, decimals_, feeAdmin_, feeReceiver_);
 
         // Set the proper admin now that initialization is done
         admin = admin_;
@@ -125,6 +129,15 @@ contract CEther is CToken {
         (MathError err, uint startingBalance) = subUInt(address(this).balance, msg.value);
         require(err == MathError.NO_ERROR);
         return startingBalance;
+    }
+
+    /**
+     * @notice Gets momaFeeFactorMantissa from factory contract
+     * @dev address(1) means underlying is ETH
+     * @return The momaFeeFactorMantissa of this market set by factory contract
+     */
+    function getMomaFeeFactorMantissa() internal view returns (uint) {
+        return MomaFactoryInterface(factory()).getMomaFeeFactorMantissa(address(comptroller), address(1));
     }
 
     /**

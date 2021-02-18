@@ -17,6 +17,8 @@ contract CErc20 is CToken, CErc20Interface {
      * @param name_ ERC-20 name of this token
      * @param symbol_ ERC-20 symbol of this token
      * @param decimals_ ERC-20 decimal precision of this token
+     * @param feeAdmin_ Address of the fee administrator of this token
+     * @param feeReceiver_ Address of the free receiver of this token
      */
     function initialize(address underlying_,
                         ComptrollerInterface comptroller_,
@@ -24,9 +26,11 @@ contract CErc20 is CToken, CErc20Interface {
                         uint initialExchangeRateMantissa_,
                         string memory name_,
                         string memory symbol_,
-                        uint8 decimals_) public {
+                        uint8 decimals_,
+                        address payable feeAdmin_,
+                        address payable feeReceiver_) public {
         // CToken initialize does the bulk of the work
-        super.initialize(comptroller_, interestRateModel_, initialExchangeRateMantissa_, name_, symbol_, decimals_);
+        super.initialize(comptroller_, interestRateModel_, initialExchangeRateMantissa_, name_, symbol_, decimals_, feeAdmin_, feeReceiver_);
 
         // Set underlying and sanity check it
         underlying = underlying_;
@@ -128,6 +132,14 @@ contract CErc20 is CToken, CErc20Interface {
     function getCashPrior() internal view returns (uint) {
         EIP20Interface token = EIP20Interface(underlying);
         return token.balanceOf(address(this));
+    }
+
+    /**
+     * @notice Gets momaFeeFactorMantissa from factory contract
+     * @return The momaFeeFactorMantissa of this market set by factory contract
+     */
+    function getMomaFeeFactorMantissa() internal view returns (uint) {
+        return MomaFactoryInterface(factory()).getMomaFeeFactorMantissa(address(comptroller), underlying);
     }
 
     /**

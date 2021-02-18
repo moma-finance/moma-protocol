@@ -7,6 +7,7 @@ import "./Exponential.sol";
 import "./EIP20Interface.sol";
 import "./EIP20NonStandardInterface.sol";
 import "./InterestRateModel.sol";
+import "./MomaFactoryInterface.sol";
 
 /**
  * @title Compound's CToken Contract
@@ -22,13 +23,17 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
      * @param name_ EIP-20 name of this token
      * @param symbol_ EIP-20 symbol of this token
      * @param decimals_ EIP-20 decimal precision of this token
+     * @param feeAdmin_ Address of the fee administrator of this token
+     * @param feeReceiver_ Address of the free receiver of this token
      */
     function initialize(ComptrollerInterface comptroller_,
                         InterestRateModel interestRateModel_,
                         uint initialExchangeRateMantissa_,
                         string memory name_,
                         string memory symbol_,
-                        uint8 decimals_) public {
+                        uint8 decimals_,
+                        address payable feeAdmin_,
+                        address payable feeReceiver_) public {
         require(msg.sender == admin, "only admin may initialize the market");
         require(accrualBlockNumber == 0 && borrowIndex == 0, "market may only be initialized once");
 
@@ -51,9 +56,19 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
         name = name_;
         symbol = symbol_;
         decimals = decimals_;
+        feeAdmin = feeAdmin_;
+        feeReceiver = feeReceiver_;
 
         // The counter starts true to prevent changing it from zero to non-zero (i.e. smaller cost/refund)
         _notEntered = true;
+    }
+
+    /**
+     * @notice Read the factory address from comptroller
+     * @return Factory address
+     */
+    function factory() public view returns (address) {
+        return comptroller.factory();
     }
 
     /**
@@ -233,7 +248,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
      * @return The borrow interest rate per block, scaled by 1e18
      */
     function borrowRatePerBlock() external view returns (uint) {
-        return interestRateModel.getBorrowRate(getCashPrior(), totalBorrows, totalReserves);
+        return interestRateModel.getBorrowRate(getCashPrior(), totalBorrows, totalReserves, totalFees, totalMomaFees);
     }
 
     /**
@@ -241,7 +256,16 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
      * @return The supply interest rate per block, scaled by 1e18
      */
     function supplyRatePerBlock() external view returns (uint) {
-        return interestRateModel.getSupplyRate(getCashPrior(), totalBorrows, totalReserves, reserveFactorMantissa);
+        return interestRateModel.getSupplyRate(
+            getCashPrior(), 
+            totalBorrows, 
+            totalReserves, 
+            reserveFactorMantissa, 
+            totalFees, 
+            feeFactorMantissa, 
+            totalMomaFees, 
+            getMomaFeeFactorMantissa()
+        );
     }
 
     /**
@@ -347,10 +371,12 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
         } else {
             /*
              * Otherwise:
-             *  exchangeRate = (totalCash + totalBorrows - totalReserves) / totalSupply
+             *  exchangeRate = (totalCash + totalBorrows - totalReserves - totalFees - totalMomaFees) / totalSupply
              */
             uint totalCash = getCashPrior();
             uint cashPlusBorrowsMinusReserves;
+            uint minusFees;
+            uint minusMomaFees;
             Exp memory exchangeRate;
             MathError mathErr;
 
@@ -359,7 +385,17 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
                 return (mathErr, 0);
             }
 
-            (mathErr, exchangeRate) = getExp(cashPlusBorrowsMinusReserves, _totalSupply);
+            (mathErr, minusFees) = subUInt(cashPlusBorrowsMinusReserves, totalFees);
+            if (mathErr != MathError.NO_ERROR) {
+                return (mathErr, 0);
+            }
+
+            (mathErr, minusMomaFees) = subUInt(minusFees, totalMomaFees);
+            if (mathErr != MathError.NO_ERROR) {
+                return (mathErr, 0);
+            }
+
+            (mathErr, exchangeRate) = getExp(minusMomaFees, _totalSupply);
             if (mathErr != MathError.NO_ERROR) {
                 return (mathErr, 0);
             }
@@ -377,17 +413,25 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
     }
 
     /**
+     * @notice Gets momaFeeFactorMantissa from factory contract
+     * @return The momaFeeFactorMantissa of this market set by factory contract
+     */
+    function getMomaFeeFactor() external view returns (uint) {
+        return getMomaFeeFactorMantissa();
+    }
+
+    /**
      * @notice Applies accrued interest to total borrows and reserves
      * @dev This calculates interest accrued from the last checkpointed block
      *   up to the current block and writes new checkpoint to storage.
      */
     function accrueInterest() public returns (uint) {
         /* Remember the initial block number */
-        uint currentBlockNumber = getBlockNumber();
-        uint accrualBlockNumberPrior = accrualBlockNumber;
+        // uint currentBlockNumber = getBlockNumber();
+        // uint accrualBlockNumberPrior = accrualBlockNumber;
 
         /* Short-circuit accumulating 0 interest */
-        if (accrualBlockNumberPrior == currentBlockNumber) {
+        if (accrualBlockNumber == getBlockNumber()) {
             return uint(Error.NO_ERROR);
         }
 
@@ -395,14 +439,20 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
         uint cashPrior = getCashPrior();
         uint borrowsPrior = totalBorrows;
         uint reservesPrior = totalReserves;
+        // uint feesPrior = totalFees;
+        // uint momaFeesPrior = totalMomaFees;
         uint borrowIndexPrior = borrowIndex;
 
+        /* Read the current moma fee factor from factory */
+        uint momaFeeFactorMantissa = getMomaFeeFactorMantissa();
+        require(momaFeeFactorMantissa <= momaFeeFactorMaxMantissa, "moma fee factor is absurdly high");
+
         /* Calculate the current borrow interest rate */
-        uint borrowRateMantissa = interestRateModel.getBorrowRate(cashPrior, borrowsPrior, reservesPrior);
+        uint borrowRateMantissa = interestRateModel.getBorrowRate(cashPrior, borrowsPrior, reservesPrior, totalFees, totalMomaFees);
         require(borrowRateMantissa <= borrowRateMaxMantissa, "borrow rate is absurdly high");
 
         /* Calculate the number of blocks elapsed since the last accrual */
-        (MathError mathErr, uint blockDelta) = subUInt(currentBlockNumber, accrualBlockNumberPrior);
+        (MathError mathErr, uint blockDelta) = subUInt(getBlockNumber(), accrualBlockNumber);
         require(mathErr == MathError.NO_ERROR, "could not calculate block delta");
 
         /*
@@ -411,6 +461,8 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
          *  interestAccumulated = simpleInterestFactor * totalBorrows
          *  totalBorrowsNew = interestAccumulated + totalBorrows
          *  totalReservesNew = interestAccumulated * reserveFactor + totalReserves
+         *  totalFeesNew = interestAccumulated * feeFactor + totalFees
+         *  totalMomaFeesNew = interestAccumulated * momaFeeFactor + totalMomaFees
          *  borrowIndexNew = simpleInterestFactor * borrowIndex + borrowIndex
          */
 
@@ -418,6 +470,8 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
         uint interestAccumulated;
         uint totalBorrowsNew;
         uint totalReservesNew;
+        uint totalFeesNew;
+        uint totalMomaFeesNew;
         uint borrowIndexNew;
 
         (mathErr, simpleInterestFactor) = mulScalar(Exp({mantissa: borrowRateMantissa}), blockDelta);
@@ -440,6 +494,16 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
             return failOpaque(Error.MATH_ERROR, FailureInfo.ACCRUE_INTEREST_NEW_TOTAL_RESERVES_CALCULATION_FAILED, uint(mathErr));
         }
 
+        (mathErr, totalFeesNew) = mulScalarTruncateAddUInt(Exp({mantissa: feeFactorMantissa}), interestAccumulated, totalFees);
+        if (mathErr != MathError.NO_ERROR) {
+            return failOpaque(Error.MATH_ERROR, FailureInfo.ACCRUE_INTEREST_NEW_TOTAL_FEES_CALCULATION_FAILED, uint(mathErr));
+        }
+
+        (mathErr, totalMomaFeesNew) = mulScalarTruncateAddUInt(Exp({mantissa: momaFeeFactorMantissa}), interestAccumulated, totalMomaFees);
+        if (mathErr != MathError.NO_ERROR) {
+            return failOpaque(Error.MATH_ERROR, FailureInfo.ACCRUE_INTEREST_NEW_TOTAL_MOMA_FEES_CALCULATION_FAILED, uint(mathErr));
+        }
+
         (mathErr, borrowIndexNew) = mulScalarTruncateAddUInt(simpleInterestFactor, borrowIndexPrior, borrowIndexPrior);
         if (mathErr != MathError.NO_ERROR) {
             return failOpaque(Error.MATH_ERROR, FailureInfo.ACCRUE_INTEREST_NEW_BORROW_INDEX_CALCULATION_FAILED, uint(mathErr));
@@ -450,10 +514,12 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
         // (No safe failures beyond this point)
 
         /* We write the previously calculated values into storage */
-        accrualBlockNumber = currentBlockNumber;
+        accrualBlockNumber = getBlockNumber();
         borrowIndex = borrowIndexNew;
         totalBorrows = totalBorrowsNew;
         totalReserves = totalReservesNew;
+        totalFees = totalFeesNew;
+        totalMomaFees = totalMomaFeesNew;
 
         /* We emit an AccrueInterest event */
         emit AccrueInterest(cashPrior, interestAccumulated, borrowIndexNew, totalBorrowsNew);
@@ -1169,6 +1235,262 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
     }
 
     /**
+      * @notice Sets a new feeAdmin for the market
+      * @dev feeAdmin function to set a new feeAdmin, only for feeAdmin
+      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
+      */
+    function _setFeeAdmin(address payable newFeeAdmin) public returns (uint) {
+        // Check caller is feeAdmin
+        if (msg.sender != feeAdmin) {
+            return fail(Error.UNAUTHORIZED, FailureInfo.SET_FEE_ADMIN_OWNER_CHECK);
+        }
+
+        // Save current values for inclusion in log
+        address oldFeeAdmin = feeAdmin;
+
+        // Set market's feeAdmin to newFeeAdmin
+        feeAdmin = newFeeAdmin;
+
+        emit NewFeeAdmin(oldFeeAdmin, newFeeAdmin);
+
+        return uint(Error.NO_ERROR);
+    }
+
+    /**
+      * @notice Sets a new feeReceiver for the market
+      * @dev feeAdmin function to set a new feeReceiver, only for feeAdmin
+      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
+      */
+    function _setFeeReceiver(address payable newFeeReceiver) public returns (uint) {
+        // Check caller is feeAdmin
+        if (msg.sender != feeAdmin) {
+            return fail(Error.UNAUTHORIZED, FailureInfo.SET_FEE_RECEIVER_OWNER_CHECK);
+        }
+
+        // The newFeeReceiver can not be 0
+        if (newFeeReceiver == address(0)) {
+            return fail(Error.BAD_INPUT, FailureInfo.SET_FEE_RECEIVER_ADDRESS_VALIDATION);
+        }
+
+        // Save current values for inclusion in log
+        address oldFeeReceiver = feeReceiver;
+
+        // Set market's feeReceiver to newFeeReceiver
+        feeReceiver = newFeeReceiver;
+
+        emit NewFeeReceiver(oldFeeReceiver, newFeeReceiver);
+
+        return uint(Error.NO_ERROR);
+    }
+
+    /**
+      * @notice accrues interest and sets a new fee factor for the protocol using _setFeeFactorFresh
+      * @dev feeAdmin function to accrue interest and set a new fee factor, only for feeAdmin
+      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
+      */
+    function _setFeeFactor(uint newFeeFactorMantissa) external nonReentrant returns (uint) {
+        uint error = accrueInterest();
+        if (error != uint(Error.NO_ERROR)) {
+            // accrueInterest emits logs on errors, but on top of that we want to log the fact that an attempted fee factor change failed.
+            return fail(Error(error), FailureInfo.SET_FEE_FACTOR_ACCRUE_INTEREST_FAILED);
+        }
+        // _setFeeFactorFresh emits fee-factor-specific logs on errors, so we don't need to.
+        return _setFeeFactorFresh(newFeeFactorMantissa);
+    }
+
+    /**
+      * @notice Sets a new fee factor for the protocol (*requires fresh interest accrual)
+      * @dev feeAdmin function to set a new fee factor, only for feeAdmin
+      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
+      */
+    function _setFeeFactorFresh(uint newFeeFactorMantissa) internal returns (uint) {
+        // Check caller is feeAdmin
+        if (msg.sender != feeAdmin) {
+            return fail(Error.UNAUTHORIZED, FailureInfo.SET_FEE_FACTOR_ADMIN_CHECK);
+        }
+
+        // Verify market's block number equals current block number
+        if (accrualBlockNumber != getBlockNumber()) {
+            return fail(Error.MARKET_NOT_FRESH, FailureInfo.SET_FEE_FACTOR_FRESH_CHECK);
+        }
+
+        // Check newFeeFactor ≤ maxFeeFactor
+        if (newFeeFactorMantissa > feeFactorMaxMantissa) {
+            return fail(Error.BAD_INPUT, FailureInfo.SET_FEE_FACTOR_BOUNDS_CHECK);
+        }
+
+        uint oldFeeFactorMantissa = feeFactorMantissa;
+        feeFactorMantissa = newFeeFactorMantissa;
+
+        emit NewFeeFactor(oldFeeFactorMantissa, newFeeFactorMantissa);
+
+        return uint(Error.NO_ERROR);
+    }
+
+    /**
+     * @notice Accrues interest and collect fees by transferring to feeReceiver, only for feeAdmin or feeReceiver
+     * @param collectAmount Amount of fees to collect, -1 means totalFees
+     * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
+     */
+    function _collectFees(uint collectAmount) external nonReentrant returns (uint) {
+        // If totalFees = 0 && collectAmount = uint(-1), just return
+        if (totalFees == 0) {
+            if (collectAmount == uint(-1)) {
+                return uint(Error.NO_ERROR);
+            }
+            return fail(Error.BAD_INPUT, FailureInfo.COLLECT_FEES_VALIDATION);
+        }
+
+        uint error = accrueInterest();
+        if (error != uint(Error.NO_ERROR)) {
+            // accrueInterest emits logs on errors, but on top of that we want to log the fact that an attempted collect fees failed.
+            return fail(Error(error), FailureInfo.COLLECT_FEES_ACCRUE_INTEREST_FAILED);
+        }
+        // _collectFeesFresh emits collect-fee-specific logs on errors, so we don't need to.
+        return _collectFeesFresh(collectAmount);
+    }
+
+    /**
+     * @notice Collect fees by transferring to feeReceiver
+     * @dev Requires fresh interest accrual, only for feeAdmin or feeReceiver
+     * @param collectAmount Amount of fees to collect, -1 means totalFees
+     * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
+     */
+    function _collectFeesFresh(uint collectAmount) internal returns (uint) {
+        // Collect moma fees first
+        _collectMomaFeesFresh(totalMomaFees);
+
+        // -1 means totalFees
+        if (collectAmount == uint(-1)) {
+            collectAmount = totalFees; // is this safe?
+        }
+
+        if (collectAmount == 0) {
+            return uint(Error.NO_ERROR);
+        }
+
+        // totalFees - collectAmount
+        uint totalFeesNew;
+
+        // Check caller is feeAdmin or feeReceiver
+        if (msg.sender != feeAdmin && msg.sender != feeReceiver) {
+            return fail(Error.UNAUTHORIZED, FailureInfo.COLLECT_FEES_ADMIN_CHECK);
+        }
+
+        // We fail gracefully unless market's block number equals current block number
+        if (accrualBlockNumber != getBlockNumber()) {
+            return fail(Error.MARKET_NOT_FRESH, FailureInfo.COLLECT_FEES_FRESH_CHECK);
+        }
+
+        // Fail gracefully if protocol has insufficient underlying cash
+        if (getCashPrior() < collectAmount) {
+            return fail(Error.TOKEN_INSUFFICIENT_CASH, FailureInfo.COLLECT_FEES_CASH_NOT_AVAILABLE);
+        }
+
+        // Check collectAmount ≤ fees[n] (totalFees)
+        if (collectAmount > totalFees) {
+            return fail(Error.BAD_INPUT, FailureInfo.COLLECT_FEES_VALIDATION);
+        }
+
+        /////////////////////////
+        // EFFECTS & INTERACTIONS
+        // (No safe failures beyond this point)
+
+        totalFeesNew = totalFees - collectAmount;
+        // We checked collectAmount <= totalFees above, so this should never revert.
+        require(totalFeesNew <= totalFees, "collect fees unexpected underflow");
+
+        // Store fees[n+1] = fees[n] - collectAmount
+        totalFees = totalFeesNew;
+
+        // doTransferOut reverts if anything goes wrong, since we can't be sure if side effects occurred.
+        doTransferOut(feeReceiver, collectAmount);
+
+        emit FeesCollected(feeReceiver, collectAmount, totalFeesNew);
+
+        return uint(Error.NO_ERROR);
+    }
+
+    /**
+     * @notice Accrues interest and collect moma fees by transferring to momaFeeReceiver
+     * @param collectAmount Amount of fees to collect, -1 means totalMomaFees
+     * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
+     */
+    function _collectMomaFees(uint collectAmount) external nonReentrant returns (uint) {
+        // If totalMomaFees = 0 && collectAmount = uint(-1), just return
+        if (totalMomaFees == 0) {
+            if (collectAmount == uint(-1)) {
+                return uint(Error.NO_ERROR);
+            }
+            return fail(Error.BAD_INPUT, FailureInfo.COLLECT_MOMA_FEES_VALIDATION);
+        }
+        
+        uint error = accrueInterest();
+        if (error != uint(Error.NO_ERROR)) {
+            // accrueInterest emits logs on errors, but on top of that we want to log the fact that an attempted collect fees failed.
+            return fail(Error(error), FailureInfo.COLLECT_MOMA_FEES_ACCRUE_INTEREST_FAILED);
+        }
+        // _collectMomaFeesFresh emits collect-moma-fee-specific logs on errors, so we don't need to.
+        return _collectMomaFeesFresh(collectAmount);
+    }
+
+    /**
+     * @notice Collect moma fees by transferring to momaFeeReceiver
+     * @dev Requires fresh interest accrual
+     * @param collectAmount Amount of fees to collect, -1 means totalMomaFees
+     * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
+     */
+    function _collectMomaFeesFresh(uint collectAmount) internal returns (uint) {
+        // -1 means totalMomaFees
+        if (collectAmount == uint(-1)) {
+            collectAmount = totalMomaFees; // is this safe?
+        }
+
+        if (collectAmount == 0) {
+            return uint(Error.NO_ERROR);
+        }
+
+        // totalMomaFees - collectAmount
+        uint totalMomaFeesNew;
+
+        // We fail gracefully unless market's block number equals current block number
+        if (accrualBlockNumber != getBlockNumber()) {
+            return fail(Error.MARKET_NOT_FRESH, FailureInfo.COLLECT_MOMA_FEES_FRESH_CHECK);
+        }
+
+        // Fail gracefully if protocol has insufficient underlying cash
+        if (getCashPrior() < collectAmount) {
+            return fail(Error.TOKEN_INSUFFICIENT_CASH, FailureInfo.COLLECT_MOMA_FEES_CASH_NOT_AVAILABLE);
+        }
+
+        // Check collectAmount ≤ momaFees[n] (totalMomaFees)
+        if (collectAmount > totalMomaFees) {
+            return fail(Error.BAD_INPUT, FailureInfo.COLLECT_MOMA_FEES_VALIDATION);
+        }
+
+        // Read the current moma fee receiver from factory
+        address payable momaFeeReceiver = MomaFactoryInterface(factory()).getMomaFeeReceiver(address(comptroller));
+
+        /////////////////////////
+        // EFFECTS & INTERACTIONS
+        // (No safe failures beyond this point)
+
+        totalMomaFeesNew = totalMomaFees - collectAmount;
+        // We checked collectAmount <= totalMomaFees above, so this should never revert.
+        require(totalMomaFeesNew <= totalMomaFees, "collect moma fees unexpected underflow");
+
+        // Store momaFees[n+1] = momaFees[n] - collectAmount
+        totalMomaFees = totalMomaFeesNew;
+
+        // doTransferOut reverts if anything goes wrong, since we can't be sure if side effects occurred.
+        doTransferOut(momaFeeReceiver, collectAmount);
+
+        emit MomaFeesCollected(momaFeeReceiver, collectAmount, totalMomaFeesNew);
+
+        return uint(Error.NO_ERROR);
+    }
+
+    /**
       * @notice accrues interest and sets a new reserve factor for the protocol using _setReserveFactorFresh
       * @dev Admin function to accrue interest and set a new reserve factor
       * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
@@ -1399,6 +1721,12 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
      * @return The quantity of underlying owned by this contract
      */
     function getCashPrior() internal view returns (uint);
+
+    /**
+     * @notice Gets momaFeeFactorMantissa from factory contract
+     * @return The momaFeeFactorMantissa of this market set by factory contract
+     */
+    function getMomaFeeFactorMantissa() internal view returns (uint);
 
     /**
      * @dev Performs a transfer in, reverting upon failure. Returns the amount actually transferred to the protocol, in case of a fee.

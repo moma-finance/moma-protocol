@@ -54,30 +54,45 @@ contract JumpRateModel is InterestRateModel {
     }
 
     /**
-     * @notice Calculates the utilization rate of the market: `borrows / (cash + borrows - reserves)`
+     * @notice Calculates the utilization rate of the market: `borrows / (cash + borrows - reserves - fees - momaFees)`
      * @param cash The amount of cash in the market
      * @param borrows The amount of borrows in the market
-     * @param reserves The amount of reserves in the market (currently unused)
+     * @param reserves The amount of reserves in the market
+     * @param fees The amount of fees in the market
+     * @param momaFees The amount of Moma fees in the market
      * @return The utilization rate as a mantissa between [0, 1e18]
      */
-    function utilizationRate(uint cash, uint borrows, uint reserves) public pure returns (uint) {
+    function utilizationRate(
+        uint cash, 
+        uint borrows, 
+        uint reserves, 
+        uint fees, 
+        uint momaFees
+    ) public pure returns (uint) {
         // Utilization rate is 0 when there are no borrows
         if (borrows == 0) {
             return 0;
         }
-
-        return borrows.mul(1e18).div(cash.add(borrows).sub(reserves));
+        return borrows.mul(1e18).div(cash.add(borrows).sub(reserves).sub(fees).sub(momaFees));
     }
 
     /**
-     * @notice Calculates the current borrow rate per block, with the error code expected by the market
+     * @notice Calculates the current borrow rate per block
      * @param cash The amount of cash in the market
      * @param borrows The amount of borrows in the market
      * @param reserves The amount of reserves in the market
+     * @param fees The amount of fees in the market
+     * @param momaFees The amount of Moma fees in the market
      * @return The borrow rate percentage per block as a mantissa (scaled by 1e18)
      */
-    function getBorrowRate(uint cash, uint borrows, uint reserves) public view returns (uint) {
-        uint util = utilizationRate(cash, borrows, reserves);
+    function getBorrowRate(
+        uint cash, 
+        uint borrows, 
+        uint reserves, 
+        uint fees, 
+        uint momaFees
+    ) public view returns (uint) {
+        uint util = utilizationRate(cash, borrows, reserves, fees, momaFees);
 
         if (util <= kink) {
             return util.mul(multiplierPerBlock).div(1e18).add(baseRatePerBlock);
@@ -94,12 +109,24 @@ contract JumpRateModel is InterestRateModel {
      * @param borrows The amount of borrows in the market
      * @param reserves The amount of reserves in the market
      * @param reserveFactorMantissa The current reserve factor for the market
+     * @param fees The amount of fees in the market
+     * @param feeFactorMantissa The current fee factor for the market
+     * @param momaFees The amount of Moma fees in the market
+     * @param momaFeeFactorMantissa The current Moma fee factor for the market
      * @return The supply rate percentage per block as a mantissa (scaled by 1e18)
      */
-    function getSupplyRate(uint cash, uint borrows, uint reserves, uint reserveFactorMantissa) public view returns (uint) {
-        uint oneMinusReserveFactor = uint(1e18).sub(reserveFactorMantissa);
-        uint borrowRate = getBorrowRate(cash, borrows, reserves);
-        uint rateToPool = borrowRate.mul(oneMinusReserveFactor).div(1e18);
-        return utilizationRate(cash, borrows, reserves).mul(rateToPool).div(1e18);
+    function getSupplyRate(
+        uint cash, 
+        uint borrows, 
+        uint reserves, 
+        uint reserveFactorMantissa, 
+        uint fees, 
+        uint feeFactorMantissa, 
+        uint momaFees, 
+        uint momaFeeFactorMantissa
+    ) public view returns (uint) {
+        uint oneMinusFactor = uint(1e18).sub(reserveFactorMantissa).sub(feeFactorMantissa).sub(momaFeeFactorMantissa);
+        uint rateToPool = getBorrowRate(cash, borrows, reserves, fees, momaFees).mul(oneMinusFactor).div(1e18);
+        return utilizationRate(cash, borrows, reserves, fees, momaFees).mul(rateToPool).div(1e18);
     }
 }

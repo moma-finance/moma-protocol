@@ -20,6 +20,8 @@ contract CErc20Delegator is CTokenInterface, CErc20Interface, CDelegatorInterfac
      * @param admin_ Address of the administrator of this token
      * @param implementation_ The address of the implementation the contract delegates to
      * @param becomeImplementationData The encoded args for becomeImplementation
+     * @param feeAdmin_ Address of the fee administrator of this token
+     * @param feeReceiver_ Address of the free receiver of this token
      */
     constructor(address underlying_,
                 ComptrollerInterface comptroller_,
@@ -30,19 +32,23 @@ contract CErc20Delegator is CTokenInterface, CErc20Interface, CDelegatorInterfac
                 uint8 decimals_,
                 address payable admin_,
                 address implementation_,
-                bytes memory becomeImplementationData) public {
+                bytes memory becomeImplementationData,
+                address payable feeAdmin_,
+                address payable feeReceiver_) public {
         // Creator of the contract is admin during initialization
         admin = msg.sender;
 
         // First delegate gets to initialize the delegator (i.e. storage contract)
-        delegateTo(implementation_, abi.encodeWithSignature("initialize(address,address,address,uint256,string,string,uint8)",
+        delegateTo(implementation_, abi.encodeWithSignature("initialize(address,address,address,uint256,string,string,uint8,address,address)",
                                                             underlying_,
                                                             comptroller_,
                                                             interestRateModel_,
                                                             initialExchangeRateMantissa_,
                                                             name_,
                                                             symbol_,
-                                                            decimals_));
+                                                            decimals_,
+                                                            feeAdmin_,
+                                                            feeReceiver_));
 
         // New implementations always get set via the settor (post-initialize)
         _setImplementation(implementation_, false, becomeImplementationData);

@@ -31,6 +31,16 @@ contract CTokenStorage {
     uint internal constant borrowRateMaxMantissa = 0.0005e16;
 
     /**
+     * @notice Maximum fraction of interest that can be set aside for fees
+     */
+    uint internal constant feeFactorMaxMantissa = 0.1e18;
+
+    /**
+     * @notice Maximum fraction of interest that can be set aside for moma fees
+     */
+    uint internal constant momaFeeFactorMaxMantissa = 0.1e18;
+
+    /**
      * @notice Maximum fraction of interest that can be set aside for reserves
      */
     uint internal constant reserveFactorMaxMantissa = 1e18;
@@ -46,6 +56,16 @@ contract CTokenStorage {
     address payable public pendingAdmin;
 
     /**
+     * @notice Fee admin for this market
+     */
+    address payable public feeAdmin;
+
+    /**
+     * @notice Fee receiver for this market
+     */
+    address payable public feeReceiver;
+
+    /**
      * @notice Contract which oversees inter-cToken operations
      */
     ComptrollerInterface public comptroller;
@@ -59,6 +79,11 @@ contract CTokenStorage {
      * @notice Initial exchange rate used when minting the first CTokens (used when totalSupply = 0)
      */
     uint internal initialExchangeRateMantissa;
+
+    /**
+     * @notice Fraction of interest currently set aside for fees
+     */
+    uint public feeFactorMantissa;
 
     /**
      * @notice Fraction of interest currently set aside for reserves
@@ -79,6 +104,16 @@ contract CTokenStorage {
      * @notice Total amount of outstanding borrows of the underlying in this market
      */
     uint public totalBorrows;
+
+    /**
+     * @notice Total amount of fees of the underlying held in this market
+     */
+    uint public totalFees;
+
+    /**
+     * @notice Total amount of Moma fees of the underlying held in this market
+     */
+    uint public totalMomaFees;
 
     /**
      * @notice Total amount of reserves of the underlying held in this market
@@ -179,6 +214,31 @@ contract CTokenInterface is CTokenStorage {
     event NewMarketInterestRateModel(InterestRateModel oldInterestRateModel, InterestRateModel newInterestRateModel);
 
     /**
+     * @notice Event emitted when feeAdmin is changed
+     */
+    event NewFeeAdmin(address oldFeeAdmin, address newFeeAdmin);
+
+    /**
+     * @notice Event emitted when feeReceiver is changed
+     */
+    event NewFeeReceiver(address oldFeeReceiver, address newFeeReceiver);
+
+    /**
+     * @notice Event emitted when the fee factor is changed
+     */
+    event NewFeeFactor(uint oldFeeFactorMantissa, uint newFeeFactorMantissa);
+
+    /**
+     * @notice Event emitted when the fees are collected
+     */
+    event FeesCollected(address feeReceiver, uint collectAmount, uint newTotalFees);
+
+    /**
+     * @notice Event emitted when the moma fees are collected
+     */
+    event MomaFeesCollected(address momaFeeReceiver, uint collectAmount, uint newTotalMomaFees);
+
+    /**
      * @notice Event emitted when the reserve factor is changed
      */
     event NewReserveFactor(uint oldReserveFactorMantissa, uint newReserveFactorMantissa);
@@ -226,6 +286,7 @@ contract CTokenInterface is CTokenStorage {
     function exchangeRateCurrent() public returns (uint);
     function exchangeRateStored() public view returns (uint);
     function getCash() external view returns (uint);
+    function getMomaFeeFactor() external view returns (uint);
     function accrueInterest() public returns (uint);
     function seize(address liquidator, address borrower, uint seizeTokens) external returns (uint);
 
@@ -235,6 +296,11 @@ contract CTokenInterface is CTokenStorage {
     function _setPendingAdmin(address payable newPendingAdmin) external returns (uint);
     function _acceptAdmin() external returns (uint);
     function _setComptroller(ComptrollerInterface newComptroller) public returns (uint);
+    function _setFeeAdmin(address payable newFeeAdmin) public returns (uint);
+    function _setFeeReceiver(address payable newFeeReceiver) public returns (uint);
+    function _setFeeFactor(uint newFeeFactorMantissa) external returns (uint);
+    function _collectFees(uint collectAmount) external returns (uint);
+    function _collectMomaFees(uint collectAmount) external returns (uint);
     function _setReserveFactor(uint newReserveFactorMantissa) external returns (uint);
     function _reduceReserves(uint reduceAmount) external returns (uint);
     function _setInterestRateModel(InterestRateModel newInterestRateModel) public returns (uint);
