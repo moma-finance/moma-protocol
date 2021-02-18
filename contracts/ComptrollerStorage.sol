@@ -5,6 +5,11 @@ import "./PriceOracle.sol";
 
 contract UnitrollerAdminStorage {
     /**
+    * @notice Factory of this contract
+    */
+    address public factory;
+
+    /**
     * @notice Administrator for this contract
     */
     address public admin;

@@ -4,6 +4,8 @@ contract ComptrollerInterface {
     /// @notice Indicator that this is a Comptroller contract (for inspection)
     bool public constant isComptroller = true;
 
+    function factory() external view returns (address);
+
     /*** Assets You Are In ***/
 
     function enterMarkets(address[] calldata cTokens) external returns (uint[] memory);

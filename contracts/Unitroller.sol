@@ -31,7 +31,13 @@ contract Unitroller is UnitrollerAdminStorage, ComptrollerErrorReporter {
 
     constructor() public {
         // Set admin to caller
-        admin = msg.sender;
+        factory = msg.sender;
+    }
+
+    // called once by the factory at time of deployment
+    function initialize(address admin_) external {
+        require(msg.sender == factory && admin == address(0), 'Unitroller: FORBIDDEN'); // sufficient check
+        admin = admin_;
     }
 
     /*** Admin Functions ***/
