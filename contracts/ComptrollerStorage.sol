@@ -112,22 +112,22 @@ contract ComptrollerV3Storage is ComptrollerV2Storage {
     CToken[] public allMarkets;
 
     /// @notice The portion of compRate that each market currently receives
-    mapping(address => uint) public compSpeeds;
+    mapping(address => uint) public momaSpeeds;
 
     /// @notice The COMP market supply state for each market
-    mapping(address => CompMarketState) public compSupplyState;
+    mapping(address => CompMarketState) public momaSupplyState;
 
     /// @notice The COMP market borrow state for each market
-    mapping(address => CompMarketState) public compBorrowState;
+    mapping(address => CompMarketState) public momaBorrowState;
 
     /// @notice The COMP borrow index for each market for each supplier as of the last time they accrued COMP
-    mapping(address => mapping(address => uint)) public compSupplierIndex;
+    mapping(address => mapping(address => uint)) public momaSupplierIndex;
 
     /// @notice The COMP borrow index for each market for each borrower as of the last time they accrued COMP
-    mapping(address => mapping(address => uint)) public compBorrowerIndex;
+    mapping(address => mapping(address => uint)) public momaBorrowerIndex;
 
     /// @notice The COMP accrued but not yet transferred to each user
-    mapping(address => uint) public compAccrued;
+    mapping(address => uint) public momaAccrued;
 }
 
 contract ComptrollerV4Storage is ComptrollerV3Storage {
@@ -139,20 +139,39 @@ contract ComptrollerV4Storage is ComptrollerV3Storage {
 }
 
 contract ComptrollerV5Storage is ComptrollerV4Storage {
-    // struct TokenFarmState {
-    //     /// @notice The farm token's address
-    //     EIP20Interface token;
+    struct TokenFarmState {
+        /// @notice The block number to start to farm this token
+        uint32 startBlock;
 
-    //     /// @notice The block number to start to farm this token
-    //     uint32 startBlock;
+        /// @notice The block number to stop farming
+        uint32 endBlock;
 
-    //     /// @notice The block number to stop farming
-    //     uint32 endBlock;
-    // }
-    EIP20Interface public farmToken;
-    uint32 public startBlock;
-    uint32 public endBlock;
-    /// @notice The token farm state
-    // TokenFarmState public farmState;
-    // mapping(address => TokenFarmState) public farmState;
+        /// @notice The portion of compRate that each market currently receives
+        mapping(address => uint) speeds;
+
+        /// @notice The COMP market supply state for each market
+        mapping(address => CompMarketState) supplyState;
+
+        /// @notice The COMP market borrow state for each market
+        mapping(address => CompMarketState) borrowState;
+
+        /// @notice The COMP borrow index for each market for each supplier as of the last time they accrued COMP
+        mapping(address => mapping(address => uint)) supplierIndex;
+
+        /// @notice The COMP borrow index for each market for each borrower as of the last time they accrued COMP
+        mapping(address => mapping(address => uint)) borrowerIndex;
+
+        /// @notice The COMP accrued but not yet transferred to each user
+        mapping(address => uint) accrued;
+    }
+
+    /// @notice The token farm states
+    mapping(address => TokenFarmState) public farmStates;
+
+    /// @notice A list of all tokens
+    address[] public allTokens;
+
+    uint32 public momaStartBlock;
+    uint32 public momaEndBlock;
+    
 }

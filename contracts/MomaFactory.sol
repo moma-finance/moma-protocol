@@ -1,11 +1,17 @@
 pragma solidity ^0.5.16;
 
+import "./CToken.sol";
+import "./Comptroller.sol";
 import "./Unitroller.sol";
 import "./MomaFactoryInterface.sol";
+import "./Governance/Comp.sol";
+import "./SafeMath.sol";
 
 
 contract MomaFactory is MomaFactoryInterface {
+    using SafeMath for uint;
 
+    Comp public moma;
     address public admin;
     address public feeAdmin;
     address payable public defualtFeeReceiver;
@@ -18,7 +24,31 @@ contract MomaFactory is MomaFactoryInterface {
         address payable poolFeeReceiver;
         uint feeFactor;
         bool noFee;
-        bool isLending;
+
+        // MOMA farming
+        /// @notice The block number start to farm MOMA, used for rewards calculation
+        uint startBlock;
+
+        /// @notice The block number to stop farming, used for rewards calculation
+        uint endBlock;
+
+        /// @notice The portion of MOMA speed that each market currently receives
+        mapping(address => uint) momaSpeeds;
+
+        /// @notice The last MOMA claimable calculation block of each moma market of this pool
+        mapping(address => uint) lastBlocks;
+
+        /// @notice The MOMA claimable of each moma market of this pool
+        mapping(address => uint) momaClaimable;
+
+        /// @notice The MOMA claimed of each moma market of this pool
+        mapping(address => uint) momaClaimed;
+
+        /// @notice The MOMA support market of this pool
+        mapping(address => bool) isMomaMarket;
+
+        /// @notice A list of all markets
+        CToken[] allMarkets;
     }
 
     mapping(address => uint) public tokenFeeFactors;
@@ -139,6 +169,162 @@ contract MomaFactory is MomaFactoryInterface {
         emit NewPoolFeeStatus(pool, oldPoolFeeStatus, _noFee);
     }
 
+
+    /*** MOMA farming ***/
+
+    /**
+     * @notice Accrue MOMA to the market by updating the momaClaimable
+     * @dev Note: lastBlocks should less than endBlock
+     * @param pool The moma pool to update
+     * @param cToken The moma market to update
+     */
+    function updateMomaMarketStatus(address pool, CToken cToken) internal {
+        uint blockNumber = getBlockNumber();
+        PoolInfo storage info = pools[pool];
+        if (info.startBlock > 0) {
+            uint lastBlock = info.lastBlocks[address(cToken)];
+            if (lastBlock < info.startBlock) lastBlock = info.startBlock;
+            if (blockNumber > lastBlock && lastBlock < info.endBlock) {
+                uint nextBlock = blockNumber;
+                if (nextBlock > info.endBlock) nextBlock = info.endBlock;
+                uint speed = info.momaSpeeds[address(cToken)];
+                if (speed > 0) { // lastBlock < nextBlock <= endBlock
+                    uint deltaBlocks = nextBlock.sub(lastBlock);
+                    uint momaAccrued = deltaBlocks.mul(speed);
+                    uint lastMomaClaimable = info.momaClaimable[address(cToken)];
+                    uint newMomaClaimable = lastMomaClaimable.add(momaAccrued);
+
+                    info.momaClaimable[address(cToken)] = newMomaClaimable;
+                    emit DistributedMarketMoma(pool, address(cToken), newMomaClaimable, momaAccrued, nextBlock);
+                }
+                info.lastBlocks[address(cToken)] = nextBlock;
+            }
+        }
+    }
+
+    /**
+     * @notice Transfer MOMA to the user
+     * @dev Note: If there is not enough MOMA, factory do not perform the transfer
+     * @param user The address of the user to transfer MOMA to
+     * @param amount The amount of token to (possibly) transfer
+     * @return The amount of token which was NOT transferred to the user
+     */
+    function grantMomaInternal(address user, uint amount) internal returns (uint) {
+        uint remaining = moma.balanceOf(address(this));
+        if (amount > 0 && amount <= remaining) {
+            moma.transfer(user, amount);
+            return 0;
+        }
+        return amount;
+    }
+
+    /**
+     * @notice Pool called to transfer MOMA to the user
+     * @dev Note: If there is not enough MOMA, factory do not perform the transfer
+     * @param cToken The market to claim MOMA in
+     * @param user The address of the user to transfer MOMA to
+     * @param amount The amount of MOMA to (possibly) transfer
+     * @return The amount of MOMA which was NOT transferred to the user
+     */
+    function claim(address cToken, address user, uint amount) external returns (uint) {
+        // pool must be msg.sender
+        PoolInfo storage info = pools[msg.sender];
+        // only pool can claim for user
+        require(info.creator != address(0), 'MomaFactory: can only claim through pool');
+
+        updateMomaMarketStatus(msg.sender, CToken(cToken));
+
+        uint claimable = info.momaClaimable[cToken];
+        uint claimed = info.momaClaimed[cToken];
+        uint newClaimed = claimed.add(amount);
+        if (newClaimed > claimable) return amount;
+
+        uint notTransfered = grantMomaInternal(user, amount);
+        info.momaClaimed[cToken] = newClaimed.sub(notTransfered);
+        return notTransfered;
+    }
+
+    /*** MOMA Distribution Admin ***/
+
+    /**
+     * @notice Transfer MOMA to the recipient
+     * @dev Note: If there is not enough MOMA, we do not perform the transfer
+     * @param recipient The address of the recipient to transfer MOMA to
+     * @param amount The amount of MOMA to (possibly) transfer
+     */
+    function _grantToken(address recipient, uint amount) public {
+        require(msg.sender == admin, 'MomaFactory: only admin can grant token');
+        uint notTransfered = grantMomaInternal(recipient, amount);
+        require(notTransfered == 0, 'MomaFactory: insufficient MOMA for grant');
+        emit MomaGranted(recipient, amount);
+    }
+
+    /**
+     * @notice Set the MOMA token, can only call once
+     * @param _moma The MOMA token address
+     */
+    function setMomaToken(Comp _moma) external {
+        require(msg.sender == admin && address(moma) == address(0), 'MomaFactory: admin check');
+        moma = _moma;
+    }
+
+    /**
+     * @notice Set a MOMA pool, will call pool to set farm block
+     * @dev Note: can call multi-times: first set, short endBlock and start next farm
+     * @param pool The address of the pool, must be created first
+     * @param _startBlock The start block number of MOMA farming, should > 0
+     * @param _endBlock The end block number of MOMA farming, should > _startBlock
+     * @param reset Weather reset MOMA farm state, afther reset user will lose undistributed MOMA, should after last endBlock
+     */
+    function setMomaPool(address pool, uint _startBlock, uint _endBlock, bool reset) external {
+        require(msg.sender == admin, 'MomaFactory: admin check');
+        require(_endBlock > _startBlock, 'MomaFactory: endBlock less than startBlock');
+        // require(address(moma) != address(0), 'MomaFactory: MOMA token not setted');
+        PoolInfo storage info = pools[pool];
+        require(info.creator != address(0), 'MomaFactory: pool not created');
+        // must be lending pool?
+
+        uint err = Comptroller(pool)._setMomaFarming(_startBlock, _endBlock, reset);
+        require(err == 0, 'MomaFactory: setMomaPool failed');
+
+        uint oldStartBlock = info.startBlock;
+        uint oldEndBlock = info.endBlock;
+        info.startBlock = _startBlock;
+        info.endBlock = _endBlock;
+        emit MomaPoolUpdated(pool, oldStartBlock, oldEndBlock, _startBlock, _endBlock, reset);
+    }
+
+    /**
+     * @notice Set a MOMA market's speed, will also call pool to set farm speed
+     * @dev Note: can call at any time, this will also update moma market status
+     * @param pool The address of the pool, must be created first
+     * @param cToken The pool market to set speed
+     * @param momaSpeed The new speed, 0 means no new MOMA farm
+     */
+    function setMomaSpeed(address pool, CToken cToken, uint momaSpeed) external {
+        require(msg.sender == admin, 'MomaFactory: admin check');
+        require(address(moma) != address(0), 'MomaFactory: MOMA token not setted');
+        PoolInfo storage info = pools[pool];
+        require(info.creator != address(0), 'MomaFactory: pool not created');
+        require(info.startBlock > 0, 'MomaFactory: not moma pool');
+        // must be lending pool?
+
+        uint err = Comptroller(pool)._setMomaSpeed(cToken, momaSpeed);
+        require(err == 0, 'MomaFactory: setMomaSpeed failed');
+        
+        updateMomaMarketStatus(pool, cToken);
+        info.momaSpeeds[address(cToken)] = momaSpeed;
+        emit MomaMarketSpeedUpdated(pool, address(cToken), momaSpeed);
+
+        if (info.isMomaMarket[address(cToken)] == false) {
+            info.allMarkets.push(cToken);
+            info.isMomaMarket[address(cToken)] == true;
+        }
+    }
+
+    function getBlockNumber() public view returns (uint) {
+        return block.number;
+    }
 }
 
 
