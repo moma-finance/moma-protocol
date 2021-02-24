@@ -4,6 +4,7 @@ import "./CToken.sol";
 import "./Comptroller.sol";
 import "./Unitroller.sol";
 import "./MomaFactoryInterface.sol";
+import "./FarmingDelegate.sol";
 import "./Governance/Comp.sol";
 import "./SafeMath.sol";
 
@@ -12,6 +13,7 @@ contract MomaFactory is MomaFactoryInterface {
     using SafeMath for uint;
 
     Comp public moma;
+    FarmingDelegate public farmingDelegate;
     address public admin;
     address public feeAdmin;
     address payable public defualtFeeReceiver;
@@ -78,6 +80,7 @@ contract MomaFactory is MomaFactoryInterface {
         emit PoolCreated(pool, msg.sender, allPools.length);
     }
 
+    /*** view Functions ***/
     function allPoolsLength() external view returns (uint) {
         return allPools.length;
     }
@@ -96,12 +99,39 @@ contract MomaFactory is MomaFactoryInterface {
         }
     }
 
+    function getMomaMarketSpeed(address pool, address market) external view returns (uint) {
+        return pools[pool].momaSpeeds[market];
+    }
+
+    function getMomaMarketLastBlocks(address pool, address market) external view returns (uint) {
+        return pools[pool].lastBlocks[market];
+    }
+
+    function getMomaMarketClaimable(address pool, address market) external view returns (uint) {
+        return pools[pool].momaClaimable[market];
+    }
+
+    function getMomaMarketClaimed(address pool, address market) external view returns (uint) {
+        return pools[pool].momaClaimed[market];
+    }
+
+    function getIsMomaMarket(address pool, address market) external view returns (bool) {
+        return pools[pool].isMomaMarket[market];
+    }
+
     /*** admin Functions ***/
     function setAdmin(address _newAdmin) external {
         require(msg.sender == admin && _newAdmin != address(0), 'MomaFactory: admin check');
         address oldAdmin = admin;
         admin = _newAdmin;
         emit NewAdmin(oldAdmin, _newAdmin);
+    }
+
+    function setFarmingDelegate(FarmingDelegate _delegate) external {
+        require(msg.sender == admin, 'MomaFactory: admin check');
+        address oldDelegate = address(farmingDelegate);
+        farmingDelegate = _delegate;
+        emit NewFarmingDelegate(oldDelegate, address(_delegate));
     }
 
     /*** feeAdmin Functions ***/

@@ -382,7 +382,7 @@ contract Comptroller is ComptrollerInterface, ComptrollerV5Storage, ComptrollerE
         }
 
         // Keep the flywheel moving
-        Exp memory borrowIndex = Exp({mantissa: CToken(cToken).borrowIndex()});
+        uint borrowIndex = CToken(cToken).borrowIndex();
         updateCompBorrowIndex(cToken, borrowIndex);
         distributeBorrowerComp(cToken, borrower, borrowIndex);
 
@@ -430,7 +430,7 @@ contract Comptroller is ComptrollerInterface, ComptrollerV5Storage, ComptrollerE
         }
 
         // Keep the flywheel moving
-        Exp memory borrowIndex = Exp({mantissa: CToken(cToken).borrowIndex()});
+        uint borrowIndex = CToken(cToken).borrowIndex();
         updateCompBorrowIndex(cToken, borrowIndex);
         distributeBorrowerComp(cToken, borrower, borrowIndex);
 
@@ -1082,7 +1082,7 @@ contract Comptroller is ComptrollerInterface, ComptrollerV5Storage, ComptrollerE
      * @param cToken The market whose supply index to update
      * @param marketBorrowIndex The market borrow index
      */
-    function updateCompBorrowIndex(address cToken, Exp memory marketBorrowIndex) internal {
+    function updateCompBorrowIndex(address cToken, uint marketBorrowIndex) internal {
         updateMomaBorrowIndex(cToken, marketBorrowIndex);
         for (uint i = 0; i < allTokens.length; i++) {
             address token = allTokens[i];
@@ -1110,7 +1110,7 @@ contract Comptroller is ComptrollerInterface, ComptrollerV5Storage, ComptrollerE
      * @param borrower The address of the borrower to distribute tokens and MOMA to
      * @param marketBorrowIndex The market borrow index
      */
-    function distributeBorrowerComp(address cToken, address borrower, Exp memory marketBorrowIndex) internal {
+    function distributeBorrowerComp(address cToken, address borrower, uint marketBorrowIndex) internal {
         distributeBorrowerMoma(cToken, borrower, marketBorrowIndex);
         for (uint i = 0; i < allTokens.length; i++) {
             address token = allTokens[i];
@@ -1118,48 +1118,8 @@ contract Comptroller is ComptrollerInterface, ComptrollerV5Storage, ComptrollerE
         }
     }
 
+
     /*** Tokens Farming ***/
-
-    /**
-     * @notice Set token speed for a single market
-     * @param token Which farm token to update
-     * @param cToken The market whose token speed to update
-     * @param newSpeed New token speed for market
-     */
-    function setTokenSpeedInternal(address token, CToken cToken, uint newSpeed) internal {
-        TokenFarmState storage state = farmStates[token];
-        // require(isFarming(token), "token is not farming");
-        uint currentTokenSpeed = state.speeds[address(cToken)];
-        if (currentTokenSpeed != 0) {
-            // note that token speed could be set to 0 to halt liquidity rewards for a market
-            Exp memory borrowIndex = Exp({mantissa: cToken.borrowIndex()});
-            updateTokenSupplyIndex(token, address(cToken));
-            updateTokenBorrowIndex(token, address(cToken), borrowIndex);
-        } else if (newSpeed != 0) {
-            // Add the token farming market
-            Market storage market = markets[address(cToken)];
-            require(market.isListed == true, "market is not listed");
-
-            if (state.supplyState[address(cToken)].index == 0 && state.supplyState[address(cToken)].block == 0) {
-                state.supplyState[address(cToken)] = CompMarketState({
-                    index: compInitialIndex,
-                    block: state.startBlock
-                });
-            }
-
-            if (state.borrowState[address(cToken)].index == 0 && state.borrowState[address(cToken)].block == 0) {
-                state.borrowState[address(cToken)] = CompMarketState({
-                    index: compInitialIndex,
-                    block: state.startBlock
-                });
-            }
-        }
-
-        if (currentTokenSpeed != newSpeed) {
-            state.speeds[address(cToken)] = newSpeed;
-            emit TokenSpeedUpdated(token, cToken, newSpeed);
-        }
-    }
 
     /**
      * @notice Accrue token to the market by updating the supply index
@@ -1167,27 +1127,7 @@ contract Comptroller is ComptrollerInterface, ComptrollerV5Storage, ComptrollerE
      * @param cToken The market whose supply index to update
      */
     function updateTokenSupplyIndex(address token, address cToken) internal {
-        uint blockNumber = getBlockNumber();
-        CompMarketState storage supplyState = farmStates[token].supplyState[cToken];
-        uint32 endBlock = farmStates[token].endBlock;
-        if (blockNumber > uint(supplyState.block) && blockNumber > uint(farmStates[token].startBlock) && supplyState.block < endBlock) {
-            uint supplySpeed = farmStates[token].speeds[cToken];
-            uint endNumber = blockNumber;
-            if (blockNumber > uint(endBlock)) endNumber = uint(endBlock);
-            uint deltaBlocks = sub_(endNumber, uint(supplyState.block)); // deltaBlocks will always > 0
-            if (supplySpeed > 0) {
-                uint supplyTokens = CToken(cToken).totalSupply();
-                uint tokenAccrued = mul_(deltaBlocks, supplySpeed);
-                Double memory ratio = supplyTokens > 0 ? fraction(tokenAccrued, supplyTokens) : Double({mantissa: 0});
-                Double memory index = add_(Double({mantissa: supplyState.index}), ratio);
-                farmStates[token].supplyState[cToken] = CompMarketState({
-                    index: safe224(index.mantissa, "new index exceeds 224 bits"),
-                    block: safe32(endNumber, "block number exceeds 32 bits")
-                });
-            } else {
-                supplyState.block = safe32(endNumber, "block number exceeds 32 bits");
-            }
-        }
+        delegateToFarming(abi.encodeWithSignature("updateTokenSupplyIndex(address,address)", token, cToken));
     }
 
     /**
@@ -1196,28 +1136,8 @@ contract Comptroller is ComptrollerInterface, ComptrollerV5Storage, ComptrollerE
      * @param cToken The market whose borrow index to update
      * @param marketBorrowIndex The market borrow index
      */
-    function updateTokenBorrowIndex(address token, address cToken, Exp memory marketBorrowIndex) internal {
-        uint blockNumber = getBlockNumber();
-        CompMarketState storage borrowState = farmStates[token].borrowState[cToken];
-        uint32 endBlock = farmStates[token].endBlock;
-        if (blockNumber > uint(borrowState.block) && blockNumber > uint(farmStates[token].startBlock) && borrowState.block < endBlock) {
-            uint borrowSpeed = farmStates[token].speeds[cToken];
-            uint endNumber = blockNumber;
-            if (blockNumber > uint(endBlock)) endNumber = uint(endBlock);
-            uint deltaBlocks = sub_(endNumber, uint(borrowState.block)); // deltaBlocks will always > 0
-            if (borrowSpeed > 0) {
-                uint borrowAmount = div_(CToken(cToken).totalBorrows(), marketBorrowIndex);
-                uint tokenAccrued = mul_(deltaBlocks, borrowSpeed);
-                Double memory ratio = borrowAmount > 0 ? fraction(tokenAccrued, borrowAmount) : Double({mantissa: 0});
-                Double memory index = add_(Double({mantissa: borrowState.index}), ratio);
-                farmStates[token].borrowState[cToken] = CompMarketState({
-                    index: safe224(index.mantissa, "new index exceeds 224 bits"),
-                    block: safe32(endNumber, "block number exceeds 32 bits")
-                });
-            } else {
-                borrowState.block = safe32(endNumber, "block number exceeds 32 bits");
-            }
-        }
+    function updateTokenBorrowIndex(address token, address cToken, uint marketBorrowIndex) internal {
+        delegateToFarming(abi.encodeWithSignature("updateTokenBorrowIndex(address,address,uint256)", token, cToken, marketBorrowIndex));
     }
 
     /**
@@ -1227,25 +1147,7 @@ contract Comptroller is ComptrollerInterface, ComptrollerV5Storage, ComptrollerE
      * @param supplier The address of the supplier to distribute token to
      */
     function distributeSupplierToken(address token, address cToken, address supplier) internal {
-        TokenFarmState storage state = farmStates[token];
-        Double memory supplyIndex = Double({mantissa: state.supplyState[cToken].index});
-        Double memory supplierIndex = Double({mantissa: state.supplierIndex[cToken][supplier]});
-        state.supplierIndex[cToken][supplier] = supplyIndex.mantissa;
-
-        if (supplyIndex.mantissa > 0) {
-            if (supplierIndex.mantissa == 0 || supplierIndex.mantissa > supplyIndex.mantissa) {
-                supplierIndex.mantissa = compInitialIndex;
-            }
-        }
-
-        if (supplyIndex.mantissa > supplierIndex.mantissa) {
-            Double memory deltaIndex = sub_(supplyIndex, supplierIndex);
-            uint supplierTokens = CToken(cToken).balanceOf(supplier);
-            uint supplierDelta = mul_(supplierTokens, deltaIndex);
-            uint supplierAccrued = add_(state.accrued[supplier], supplierDelta);
-            state.accrued[supplier] = supplierAccrued;
-            emit DistributedSupplierToken(token, CToken(cToken), supplier, supplierDelta, supplyIndex.mantissa);
-        }
+        delegateToFarming(abi.encodeWithSignature("distributeSupplierToken(address,address,address)", token, cToken, supplier));
     }
 
     /**
@@ -1255,36 +1157,8 @@ contract Comptroller is ComptrollerInterface, ComptrollerV5Storage, ComptrollerE
      * @param borrower The address of the borrower to distribute COMP to
      * @param marketBorrowIndex The market borrow index
      */
-    function distributeBorrowerToken(address token, address cToken, address borrower, Exp memory marketBorrowIndex) internal {
-        TokenFarmState storage state = farmStates[token];
-        Double memory borrowIndex = Double({mantissa: state.borrowState[cToken].index});
-        Double memory borrowerIndex = Double({mantissa: state.borrowerIndex[cToken][borrower]});
-        state.borrowerIndex[cToken][borrower] = borrowIndex.mantissa;
-
-        // when updated farm token, borrowerIndex should be set to initial
-        if (borrowerIndex.mantissa > borrowIndex.mantissa) {
-            borrowerIndex.mantissa = compInitialIndex;
-        }
-
-        if (borrowerIndex.mantissa > 0 && borrowIndex.mantissa > borrowerIndex.mantissa) {
-            Double memory deltaIndex = sub_(borrowIndex, borrowerIndex);
-            uint borrowerAmount = div_(CToken(cToken).borrowBalanceStored(borrower), marketBorrowIndex);
-            uint borrowerDelta = mul_(borrowerAmount, deltaIndex);
-            uint borrowerAccrued = add_(state.accrued[borrower], borrowerDelta);
-            state.accrued[borrower] = borrowerAccrued;
-            emit DistributedBorrowerToken(token, CToken(cToken), borrower, borrowerDelta, borrowIndex.mantissa);
-        }
-    }
-
-    /**
-     * @notice Weather a token is farming
-     * @param token The token address to ask for
-     * @param cToken Which market
-     */
-    function isFarming(address token, address cToken) public view returns (bool) {
-        uint blockNumber = getBlockNumber();
-        TokenFarmState storage state = farmStates[token];
-        return state.speeds[cToken] > 0 && blockNumber > uint(state.startBlock) && blockNumber <= uint(state.endBlock);
+    function distributeBorrowerToken(address token, address cToken, address borrower, uint marketBorrowIndex) internal {
+        delegateToFarming(abi.encodeWithSignature("distributeBorrowerToken(address,address,address,uint256)", token, cToken, borrower, marketBorrowIndex));
     }
 
     /**
@@ -1316,47 +1190,9 @@ contract Comptroller is ComptrollerInterface, ComptrollerV5Storage, ComptrollerE
      * @param suppliers Whether or not to claim tokens earned by supplying
      */
     function claimToken(address[] memory holders, CToken[] memory cTokens, address[] memory tokens, bool borrowers, bool suppliers) public {
-        for (uint t = 0; t < tokens.length; t++) {
-            address token = tokens[t];
-            for (uint i = 0; i < cTokens.length; i++) {
-                CToken cToken = cTokens[i];
-                require(markets[address(cToken)].isListed, "market must be listed");
-                if (borrowers == true) {
-                    Exp memory borrowIndex = Exp({mantissa: cToken.borrowIndex()});
-                    updateTokenBorrowIndex(token, address(cToken), borrowIndex);
-                    for (uint j = 0; j < holders.length; j++) {
-                        distributeBorrowerToken(token, address(cToken), holders[j], borrowIndex);
-                        farmStates[token].accrued[holders[j]] = grantTokenInternal(token, holders[j], farmStates[token].accrued[holders[j]]);
-                    }
-                }
-                if (suppliers == true) {
-                    updateTokenSupplyIndex(token, address(cToken));
-                    for (uint j = 0; j < holders.length; j++) {
-                        distributeSupplierToken(token, address(cToken), holders[j]);
-                        farmStates[token].accrued[holders[j]] = grantTokenInternal(token, holders[j], farmStates[token].accrued[holders[j]]);
-                    }
-                }
-            }
-        }
+        delegateToFarming(abi.encodeWithSignature("claimToken(address[],address[],address[],bool,bool)", holders, cTokens, tokens, borrowers, suppliers));
     }
 
-    /**
-     * @notice Transfer token to the user
-     * @dev Note: If there is not enough token, we do not perform the transfer all.
-     * @param token The token to transfer
-     * @param user The address of the user to transfer token to
-     * @param amount The amount of token to (possibly) transfer
-     * @return The amount of token which was NOT transferred to the user
-     */
-    function grantTokenInternal(address token, address user, uint amount) internal returns (uint) {
-        EIP20Interface erc20 = EIP20Interface(token);
-        uint tokenRemaining = erc20.balanceOf(address(this));
-        if (amount > 0 && amount <= tokenRemaining) {
-            erc20.transfer(user, amount);
-            return 0;
-        }
-        return amount;
-    }
 
     /*** Token Distribution Admin ***/
 
@@ -1369,42 +1205,8 @@ contract Comptroller is ComptrollerInterface, ComptrollerV5Storage, ComptrollerE
      */
     function _grantToken(address token, address recipient, uint amount) public {
         require(adminOrInitializing(), "only admin can grant token");
-        uint amountLeft = grantTokenInternal(token, recipient, amount);
-        require(amountLeft == 0, "insufficient token for grant");
-        emit TokenGranted(token, recipient, amount);
-    }
 
-    /**
-     * @notice Set token speed for a single market
-     * @param token The token to update speed
-     * @param cToken The market whose token speed to update
-     * @param newSpeed New token speed for market
-     */
-    function _setTokenSpeed(address token, CToken cToken, uint newSpeed) public {
-        require(adminOrInitializing(), "only admin can set token speed");
-        setTokenSpeedInternal(token, cToken, newSpeed);
-    }
-
-    /**
-      * @notice Reset all markets state for a token
-      * @param token The token to reset state
-      */
-    function _resetTokenState(address token) internal {
-        TokenFarmState storage state = farmStates[token];
-        for (uint i = 0; i < allMarkets.length; i++) {
-            address market = address(allMarkets[i]);
-            if (state.speeds[market] > 0) {
-                state.supplyState[market] = CompMarketState({
-                    index: compInitialIndex,
-                    block: state.startBlock
-                });
-
-                state.borrowState[market] = CompMarketState({
-                    index: compInitialIndex,
-                    block: state.startBlock
-                });
-            }
-        }
+        delegateToFarming(abi.encodeWithSignature("_grantToken(address,address,uint256)", token, recipient, amount));
     }
 
     /**
@@ -1418,95 +1220,33 @@ contract Comptroller is ComptrollerInterface, ComptrollerV5Storage, ComptrollerE
       */
     function _setTokenFarming(EIP20Interface token, uint start, uint end, bool reset) external returns (uint) {
     	require(adminOrInitializing(), "only admin can update farm token");
-        require(end > start, "endBlock less than startBlock");
-        token.totalSupply(); //sanity check it
 
-        TokenFarmState storage state = farmStates[address(token)];
-        require(start != 0, "startBlock is 0");
-        require(start > getBlockNumber() || start == state.startBlock, "startBlock check");
-        uint oldStartBlock = uint(state.startBlock);
-        uint oldEndBlock = uint(state.endBlock);
-        state.startBlock = safe32(start, "start block number exceeds 32 bits");
-        state.endBlock = safe32(end, "end block number exceeds 32 bits");
-
-        if (reset == true) _resetTokenState(address(token));
-        if (oldStartBlock == 0) allTokens.push(address(token)); // when first set this token
-
-        emit FarmTokenUpdated(token, oldStartBlock, oldEndBlock, start, end);
-
-        return uint(Error.NO_ERROR);
+        bytes memory data = delegateToFarming(abi.encodeWithSignature("_setTokenFarming(address,uint256,uint256,bool)", token, start, end, reset));
+        return abi.decode(data, (uint));
     }
+
+    /**
+     * @notice Set token speed for a single market
+     * @param token The token to update speed
+     * @param cToken The market whose token speed to update
+     * @param newSpeed New token speed for market
+     */
+    function _setTokenSpeed(address token, CToken cToken, uint newSpeed) public {
+        require(adminOrInitializing(), "only admin can set token speed");
+
+        delegateToFarming(abi.encodeWithSignature("_setTokenSpeed(address,address,uint256)", token, cToken, newSpeed));
+    }
+
 
 
     /*** MOMA Farming ***/
-
-    /**
-     * @notice Set MOMA speed for a single market
-     * @param cToken The market whose MOMA speed to update
-     * @param momaSpeed New MOMA speed for market
-     * @return uint 0=success, otherwise a failure
-     */
-    function setMomaSpeedInternal(CToken cToken, uint momaSpeed) internal returns (uint) {
-        // require(address(momaToken) != address(0), "moma token not added");
-        uint currentMomaSpeed = momaSpeeds[address(cToken)];
-        if (currentMomaSpeed != 0) {
-            // note that MOMA speed could be set to 0 to halt liquidity rewards for a market
-            Exp memory borrowIndex = Exp({mantissa: cToken.borrowIndex()});
-            updateMomaSupplyIndex(address(cToken));
-            updateMomaBorrowIndex(address(cToken), borrowIndex);
-        } else if (momaSpeed != 0) {
-            // Add the MOMA market
-            Market storage market = markets[address(cToken)];
-            require(market.isListed == true, "moma market is not listed");
-
-            if (momaSupplyState[address(cToken)].index == 0 && momaSupplyState[address(cToken)].block == 0) {
-                momaSupplyState[address(cToken)] = CompMarketState({
-                    index: compInitialIndex,
-                    block: momaStartBlock
-                });
-            }
-
-            if (momaBorrowState[address(cToken)].index == 0 && momaBorrowState[address(cToken)].block == 0) {
-                momaBorrowState[address(cToken)] = CompMarketState({
-                    index: compInitialIndex,
-                    block: momaStartBlock
-                });
-            }
-        }
-
-        if (currentMomaSpeed != momaSpeed) {
-            momaSpeeds[address(cToken)] = momaSpeed;
-            emit MomaSpeedUpdated(cToken, momaSpeed);
-        }
-
-        return uint(Error.NO_ERROR);
-    }
 
     /**
      * @notice Accrue MOMA to the market by updating the supply index
      * @param cToken The market whose supply index to update
      */
     function updateMomaSupplyIndex(address cToken) internal {
-        uint blockNumber = getBlockNumber();
-        CompMarketState storage supplyState = momaSupplyState[cToken];
-        if (blockNumber > uint(supplyState.block) && blockNumber > uint(momaStartBlock) && supplyState.block < momaEndBlock) {
-            uint supplySpeed = momaSpeeds[cToken];
-            uint endNumber = blockNumber;
-            if (blockNumber > uint(momaEndBlock)) endNumber = uint(momaEndBlock);
-            uint deltaBlocks = sub_(endNumber, uint(supplyState.block)); // deltaBlocks will always > 0
-            if (supplySpeed > 0) {
-                uint supplyTokens = CToken(cToken).totalSupply();
-                uint momaAccrued = mul_(deltaBlocks, supplySpeed);
-                Double memory ratio = supplyTokens > 0 ? fraction(momaAccrued, supplyTokens) : Double({mantissa: 0});
-                Double memory index = add_(Double({mantissa: supplyState.index}), ratio);
-                momaSupplyState[cToken] = CompMarketState({
-                    index: safe224(index.mantissa, "new index exceeds 224 bits"),
-                    block: safe32(endNumber, "block number exceeds 32 bits")
-                });
-            } else {
-                supplyState.block = safe32(endNumber, "block number exceeds 32 bits");
-            }
-        }
+        delegateToFarming(abi.encodeWithSignature("updateMomaSupplyIndex(address)", cToken));
     }
 
     /**
@@ -1514,27 +1254,8 @@ contract Comptroller is ComptrollerInterface, ComptrollerV5Storage, ComptrollerE
      * @param cToken The market whose borrow index to update
      * @param marketBorrowIndex The market borrow index
      */
-    function updateMomaBorrowIndex(address cToken, Exp memory marketBorrowIndex) internal {
-        uint blockNumber = getBlockNumber();
-        CompMarketState storage borrowState = momaBorrowState[cToken];
-        if (blockNumber > uint(borrowState.block) && blockNumber > uint(momaStartBlock) && borrowState.block < momaEndBlock) {
-            uint borrowSpeed = momaSpeeds[cToken];
-            uint endNumber = blockNumber;
-            if (blockNumber > uint(momaEndBlock)) endNumber = uint(momaEndBlock);
-            uint deltaBlocks = sub_(endNumber, uint(borrowState.block)); // deltaBlocks will always > 0
-            if (borrowSpeed > 0) {
-                uint borrowAmount = div_(CToken(cToken).totalBorrows(), marketBorrowIndex);
-                uint momaAccrued = mul_(deltaBlocks, borrowSpeed);
-                Double memory ratio = borrowAmount > 0 ? fraction(momaAccrued, borrowAmount) : Double({mantissa: 0});
-                Double memory index = add_(Double({mantissa: borrowState.index}), ratio);
-                momaBorrowState[cToken] = CompMarketState({
-                    index: safe224(index.mantissa, "new index exceeds 224 bits"),
-                    block: safe32(endNumber, "block number exceeds 32 bits")
-                });
-            } else {
-                borrowState.block = safe32(endNumber, "block number exceeds 32 bits");
-            }
-        }
+    function updateMomaBorrowIndex(address cToken, uint marketBorrowIndex) internal {
+        delegateToFarming(abi.encodeWithSignature("updateMomaBorrowIndex(address,uint256)", cToken, marketBorrowIndex));
     }
 
     /**
@@ -1543,25 +1264,7 @@ contract Comptroller is ComptrollerInterface, ComptrollerV5Storage, ComptrollerE
      * @param supplier The address of the supplier to distribute MOMA to
      */
     function distributeSupplierMoma(address cToken, address supplier) internal {
-        CompMarketState storage supplyState = momaSupplyState[cToken];
-        Double memory supplyIndex = Double({mantissa: supplyState.index});
-        Double memory supplierIndex = Double({mantissa: momaSupplierIndex[cToken][supplier]});
-        momaSupplierIndex[cToken][supplier] = supplyIndex.mantissa;
-
-        if (supplyIndex.mantissa > 0) {
-            if (supplierIndex.mantissa == 0 || supplierIndex.mantissa > supplyIndex.mantissa) {
-                supplierIndex.mantissa = compInitialIndex;
-            }
-        }
-
-        if (supplyIndex.mantissa > supplierIndex.mantissa) {
-            Double memory deltaIndex = sub_(supplyIndex, supplierIndex);
-            uint supplierTokens = CToken(cToken).balanceOf(supplier);
-            uint supplierDelta = mul_(supplierTokens, deltaIndex);
-            uint supplierAccrued = add_(momaAccrued[supplier], supplierDelta);
-            momaAccrued[supplier] = supplierAccrued;
-            emit DistributedSupplierMoma(CToken(cToken), supplier, supplierDelta, supplyIndex.mantissa);
-        }
+        delegateToFarming(abi.encodeWithSignature("distributeSupplierMoma(address,address)", cToken, supplier));
     }
 
     /**
@@ -1571,25 +1274,8 @@ contract Comptroller is ComptrollerInterface, ComptrollerV5Storage, ComptrollerE
      * @param borrower The address of the borrower to distribute MOMA to
      * @param marketBorrowIndex The market borrow index
      */
-    function distributeBorrowerMoma(address cToken, address borrower, Exp memory marketBorrowIndex) internal {
-        CompMarketState storage borrowState = momaBorrowState[cToken];
-        Double memory borrowIndex = Double({mantissa: borrowState.index});
-        Double memory borrowerIndex = Double({mantissa: momaBorrowerIndex[cToken][borrower]});
-        momaBorrowerIndex[cToken][borrower] = borrowIndex.mantissa;
-
-        // when updated farm token, borrowerIndex should be set to initial
-        if (borrowerIndex.mantissa > borrowIndex.mantissa) {
-            borrowerIndex.mantissa = compInitialIndex;
-        }
-
-        if (borrowerIndex.mantissa > 0 && borrowIndex.mantissa > borrowerIndex.mantissa) {
-            Double memory deltaIndex = sub_(borrowIndex, borrowerIndex);
-            uint borrowerAmount = div_(CToken(cToken).borrowBalanceStored(borrower), marketBorrowIndex);
-            uint borrowerDelta = mul_(borrowerAmount, deltaIndex);
-            uint borrowerAccrued = add_(momaAccrued[borrower], borrowerDelta);
-            momaAccrued[borrower] = borrowerAccrued;
-            emit DistributedBorrowerMoma(CToken(cToken), borrower, borrowerDelta, borrowIndex.mantissa);
-        }
+    function distributeBorrowerMoma(address cToken, address borrower, uint marketBorrowIndex) internal {
+        delegateToFarming(abi.encodeWithSignature("distributeBorrowerMoma(address,address,uint256)", cToken, borrower, marketBorrowIndex));
     }
 
     /**
@@ -1619,60 +1305,11 @@ contract Comptroller is ComptrollerInterface, ComptrollerV5Storage, ComptrollerE
      * @param suppliers Whether or not to claim MOMA earned by supplying
      */
     function claimMoma(address[] memory holders, CToken[] memory cTokens, bool borrowers, bool suppliers) public {
-        for (uint i = 0; i < cTokens.length; i++) {
-            CToken cToken = cTokens[i];
-            require(markets[address(cToken)].isListed, "market must be listed");
-            if (borrowers == true) {
-                Exp memory borrowIndex = Exp({mantissa: cToken.borrowIndex()});
-                updateMomaBorrowIndex(address(cToken), borrowIndex);
-                for (uint j = 0; j < holders.length; j++) {
-                    distributeBorrowerMoma(address(cToken), holders[j], borrowIndex);
-                    momaAccrued[holders[j]] = grantMomaInternal(cToken, holders[j], momaAccrued[holders[j]]);
-                }
-            }
-            if (suppliers == true) {
-                updateMomaSupplyIndex(address(cToken));
-                for (uint j = 0; j < holders.length; j++) {
-                    distributeSupplierMoma(address(cToken), holders[j]);
-                    momaAccrued[holders[j]] = grantMomaInternal(cToken, holders[j], momaAccrued[holders[j]]);
-                }
-            }
-        }
-    }
-
-    /**
-     * @notice Ask factory to transfer MOMA to the user
-     * @dev Note: If there is not enough MOMA, factory do not perform the transfer all.
-     * @param cToken The market to claim MOMA in
-     * @param user The address of the user to transfer MOMA to
-     * @param amount The amount of MOMA to (possibly) transfer
-     * @return The amount of MOMA which was NOT transferred to the user
-     */
-    function grantMomaInternal(CToken cToken, address user, uint amount) internal returns (uint) {
-        return MomaFactoryInterface(factory).claim(address(cToken), user, amount);
+        delegateToFarming(abi.encodeWithSignature("claimMoma(address[],address[],bool,bool)", holders, cTokens, borrowers, suppliers));
     }
 
 
     /*** MOMA Distribution Admin ***/
-
-    /**
-      * @notice Reset all moma market state
-      */
-    function _resetMomaState() internal {
-        for (uint i = 0; i < allMarkets.length; i++) {
-            address market = address(allMarkets[i]);
-            if (momaSpeeds[market] != 0) {
-                momaSupplyState[market] = CompMarketState({
-                    index: compInitialIndex,
-                    block: momaStartBlock
-                });
-                momaBorrowState[market] = CompMarketState({
-                    index: compInitialIndex,
-                    block: momaStartBlock
-                });
-            }
-        }
-    }
 
     /**
       * @notice Support MOMA farm
@@ -1685,19 +1322,9 @@ contract Comptroller is ComptrollerInterface, ComptrollerV5Storage, ComptrollerE
     function _setMomaFarming(uint start, uint end, bool reset) external returns (uint) {
         // Check caller is factory
     	require(msg.sender == address(factory), "only factory can support MOMA farming");
-        require(start > getBlockNumber() || start == momaStartBlock, "startBlock check");
-        require(end > start, "endBlock less than startBlock");
 
-        uint oldStartBlock = uint(momaStartBlock);
-        uint oldEndBlock = uint(momaEndBlock);
-        momaStartBlock = safe32(start, "start block number exceeds 32 bits");
-        momaEndBlock = safe32(end, "end block number exceeds 32 bits");
-
-        if (reset == true) _resetMomaState();
-
-        emit FarmMomaUpdated(oldStartBlock, oldEndBlock, start, end, reset);
-
-        return uint(Error.NO_ERROR);
+        bytes memory data = delegateToFarming(abi.encodeWithSignature("_setMomaFarming(uint256,uint256,bool)", start, end, reset));
+        return abi.decode(data, (uint));
     }
 
     /**
@@ -1708,9 +1335,17 @@ contract Comptroller is ComptrollerInterface, ComptrollerV5Storage, ComptrollerE
      * @return uint 0=success, otherwise a failure
      */
     function _setMomaSpeed(CToken cToken, uint momaSpeed) external returns (uint) {
+        // Check caller is factory
         require(msg.sender == address(factory), "only factory can set moma speed");
-        return setMomaSpeedInternal(cToken, momaSpeed);
+        
+        bytes memory data = delegateToFarming(abi.encodeWithSignature("_setMomaSpeed(address,uint256)", cToken, momaSpeed));
+        return abi.decode(data, (uint));
     }
+
+
+    /*** View functions ***/
+
+    /*** Tokens Farming ***/
 
     /**
      * @notice Return all of the support tokens
@@ -1719,6 +1354,38 @@ contract Comptroller is ComptrollerInterface, ComptrollerV5Storage, ComptrollerE
      */
     function getAllTokens() public view returns (address[] memory) {
         return allTokens;
+    }
+
+    /**
+     * @notice Weather a token is farming
+     * @param token The token address to ask for
+     * @param market Which market
+     * @return Wether this market farm the token currently
+     */
+    function isFarming(address token, address market) public view returns (bool) {
+        uint blockNumber = getBlockNumber();
+        TokenFarmState storage state = farmStates[token];
+        return state.speeds[market] > 0 && blockNumber > uint(state.startBlock) && blockNumber <= uint(state.endBlock);
+    }
+
+    /**
+     * @notice Get the market speed for a token
+     * @param token The token address to ask for
+     * @param market Which market
+     * @return The market farm speed of this token currently
+     */
+    function getTokenMarketSpeed(address token, address market) external view returns (uint) {
+        return farmStates[token].speeds[market];
+    }
+
+    /**
+     * @notice Get the accrued amount of this token farming for a user
+     * @param token The token address to ask for
+     * @param user The user address to ask for
+     * @return The accrued amount of this token farming for a user
+     */
+    function getTokenUserAccrued(address token, address user) external view returns (uint) {
+        return farmStates[token].accrued[user];
     }
 
     /**
@@ -1732,5 +1399,30 @@ contract Comptroller is ComptrollerInterface, ComptrollerV5Storage, ComptrollerE
 
     function getBlockNumber() public view returns (uint) {
         return block.number;
+    }
+
+    /**
+     * @notice Get current farming contract
+     * @return The contract address
+     */
+    function currentFarmingDelegate() public view returns (address) {
+        return MomaFactoryInterface(factory).farmingDelegate();
+    }
+
+    /**
+     * @notice Internal method to delegate execution to farming contract
+     * @dev It returns to the external caller whatever the implementation returns or forwards reverts
+     * @param data The raw data to delegatecall
+     * @return The returned bytes from the delegatecall
+     */
+    function delegateToFarming(bytes memory data) internal returns (bytes memory) {
+        address callee = currentFarmingDelegate();
+        (bool success, bytes memory returnData) = callee.delegatecall(data);
+        assembly {
+            if eq(success, 0) {
+                revert(add(returnData, 0x20), returndatasize)
+            }
+        }
+        return returnData;
     }
 }

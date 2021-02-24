@@ -4,6 +4,7 @@ interface MomaFactoryInterface {
 
     event PoolCreated(address pool, address creator, uint poolLength);
     event NewAdmin(address oldAdmin, address newAdmin);
+    event NewFarmingDelegate(address oldDelegate, address newDelegate);
     event NewFeeAdmin(address oldFeeAdmin, address newFeeAdmin);
     event NewDefualtFeeReceiver(address oldFeeReceiver, address newFeeReceiver);
     event NewDefualtFeeFactor(uint oldFeeFactor, uint newFeeFactor);
@@ -25,6 +26,8 @@ interface MomaFactoryInterface {
     /// @notice Emitted when a new MOMA speed is updated for a market
     event MomaMarketSpeedUpdated(address indexed pool, address indexed cToken, uint newSpeed);
 
+    function moma() external view returns (address);
+    function farmingDelegate() external view returns (address);
     function admin() external view returns (address);
     function feeAdmin() external view returns (address);
     function defualtFeeReceiver() external view returns (address);
