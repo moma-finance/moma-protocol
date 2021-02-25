@@ -1,13 +1,13 @@
 pragma solidity ^0.5.16;
 
-import "./CErc20Delegate.sol";
+import "./MErc20Delegate.sol";
 
 /**
- * @title Compound's CDai Contract
- * @notice CToken which wraps Multi-Collateral DAI
- * @author Compound
+ * @title Moma's CDai Contract
+ * @notice MToken which wraps Multi-Collateral DAI
+ * @author Moma
  */
-contract CDaiDelegate is CErc20Delegate {
+contract MDaiDelegate is MErc20Delegate {
     /**
      * @notice DAI adapter address
      */
@@ -91,7 +91,7 @@ contract CDaiDelegate is CErc20Delegate {
         daiJoin.exit(address(this), bal / RAY);
     }
 
-    /*** CToken Overrides ***/
+    /*** MToken Overrides ***/
 
     /**
       * @notice Accrues DSR then applies accrued interest to total borrows and reserves
@@ -102,7 +102,7 @@ contract CDaiDelegate is CErc20Delegate {
         // Accumulate DSR interest
         PotLike(potAddress).drip();
 
-        // Accumulate CToken interest
+        // Accumulate MToken interest
         return super.accrueInterest();
     }
 

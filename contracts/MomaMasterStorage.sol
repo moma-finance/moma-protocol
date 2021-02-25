@@ -1,9 +1,9 @@
 pragma solidity ^0.5.16;
 
-import "./CToken.sol";
+import "./MToken.sol";
 import "./PriceOracle.sol";
 
-contract UnitrollerAdminStorage {
+contract MomaPoolAdminStorage {
     /**
     * @notice Factory of this contract
     */
@@ -20,17 +20,18 @@ contract UnitrollerAdminStorage {
     address public pendingAdmin;
 
     /**
-    * @notice Active brains of Unitroller
+    * @notice Active brains of MomaPool
     */
-    address public comptrollerImplementation;
+    address public momaMasterImplementation;
 
     /**
-    * @notice Pending brains of Unitroller
+    * @notice Pending brains of MomaPool
     */
-    address public pendingComptrollerImplementation;
+    address public pendingMomaMasterImplementation;
 }
 
-contract ComptrollerV1Storage is UnitrollerAdminStorage {
+
+contract MomaMasterV1Storage is MomaPoolAdminStorage {
 
     /**
      * @notice Oracle which gives the price of any given asset
@@ -55,11 +56,9 @@ contract ComptrollerV1Storage is UnitrollerAdminStorage {
     /**
      * @notice Per-account mapping of "assets you are in", capped by maxAssets
      */
-    mapping(address => CToken[]) public accountAssets;
+    mapping(address => MToken[]) public accountAssets;
 
-}
 
-contract ComptrollerV2Storage is ComptrollerV1Storage {
     struct Market {
         /// @notice Whether or not this market is listed
         bool isListed;
@@ -74,12 +73,12 @@ contract ComptrollerV2Storage is ComptrollerV1Storage {
         /// @notice Per-market mapping of "accounts in this asset"
         mapping(address => bool) accountMembership;
 
-        /// @notice Whether or not this market receives COMP
-        bool isComped;
+        /// @notice Whether or not this market receives MOMA
+        // bool isMomaed;
     }
 
     /**
-     * @notice Official mapping of cTokens -> Market metadata
+     * @notice Official mapping of mTokens -> Market metadata
      * @dev Used e.g. to determine if a market is supported
      */
     mapping(address => Market) public markets;
@@ -97,11 +96,10 @@ contract ComptrollerV2Storage is ComptrollerV1Storage {
     bool public seizeGuardianPaused;
     mapping(address => bool) public mintGuardianPaused;
     mapping(address => bool) public borrowGuardianPaused;
-}
 
-contract ComptrollerV3Storage is ComptrollerV2Storage {
-    struct CompMarketState {
-        /// @notice The market's last updated compBorrowIndex or compSupplyIndex
+
+    struct MomaMarketState {
+        /// @notice The market's last updated BorrowIndex or SupplyIndex
         uint224 index;
 
         /// @notice The block number the index was last updated at
@@ -109,36 +107,36 @@ contract ComptrollerV3Storage is ComptrollerV2Storage {
     }
 
     /// @notice A list of all markets
-    CToken[] public allMarkets;
+    MToken[] public allMarkets;
 
-    /// @notice The portion of compRate that each market currently receives
+    /// @notice The portion of momaRate that each market currently receives
     mapping(address => uint) public momaSpeeds;
 
-    /// @notice The COMP market supply state for each market
-    mapping(address => CompMarketState) public momaSupplyState;
+    /// @notice The MOMA market supply state for each market
+    mapping(address => MomaMarketState) public momaSupplyState;
 
-    /// @notice The COMP market borrow state for each market
-    mapping(address => CompMarketState) public momaBorrowState;
+    /// @notice The MOMA market borrow state for each market
+    mapping(address => MomaMarketState) public momaBorrowState;
 
-    /// @notice The COMP borrow index for each market for each supplier as of the last time they accrued COMP
+    /// @notice The MOMA borrow index for each market for each supplier as of the last time they accrued MOMA
     mapping(address => mapping(address => uint)) public momaSupplierIndex;
 
-    /// @notice The COMP borrow index for each market for each borrower as of the last time they accrued COMP
+    /// @notice The MOMA borrow index for each market for each borrower as of the last time they accrued MOMA
     mapping(address => mapping(address => uint)) public momaBorrowerIndex;
 
-    /// @notice The COMP accrued but not yet transferred to each user
+    /// @notice The MOMA accrued but not yet transferred to each user
     mapping(address => uint) public momaAccrued;
-}
 
-contract ComptrollerV4Storage is ComptrollerV3Storage {
+
+
     // @notice The borrowCapGuardian can set borrowCaps to any number for any market. Lowering the borrow cap could disable borrowing on the given market.
     address public borrowCapGuardian;
 
-    // @notice Borrow caps enforced by borrowAllowed for each cToken address. Defaults to zero which corresponds to unlimited borrowing.
+    // @notice Borrow caps enforced by borrowAllowed for each mToken address. Defaults to zero which corresponds to unlimited borrowing.
     mapping(address => uint) public borrowCaps;
-}
 
-contract ComptrollerV5Storage is ComptrollerV4Storage {
+
+
     struct TokenFarmState {
         /// @notice The block number to start to farm this token
         uint32 startBlock;
@@ -146,22 +144,22 @@ contract ComptrollerV5Storage is ComptrollerV4Storage {
         /// @notice The block number to stop farming
         uint32 endBlock;
 
-        /// @notice The portion of compRate that each market currently receives
+        /// @notice The portion of tokenRate that each market currently receives
         mapping(address => uint) speeds;
 
-        /// @notice The COMP market supply state for each market
-        mapping(address => CompMarketState) supplyState;
+        /// @notice The token market supply state for each market
+        mapping(address => MomaMarketState) supplyState;
 
-        /// @notice The COMP market borrow state for each market
-        mapping(address => CompMarketState) borrowState;
+        /// @notice The token market borrow state for each market
+        mapping(address => MomaMarketState) borrowState;
 
-        /// @notice The COMP borrow index for each market for each supplier as of the last time they accrued COMP
+        /// @notice The token borrow index for each market for each supplier as of the last time they accrued token
         mapping(address => mapping(address => uint)) supplierIndex;
 
-        /// @notice The COMP borrow index for each market for each borrower as of the last time they accrued COMP
+        /// @notice The token borrow index for each market for each borrower as of the last time they accrued token
         mapping(address => mapping(address => uint)) borrowerIndex;
 
-        /// @notice The COMP accrued but not yet transferred to each user
+        /// @notice The token accrued but not yet transferred to each user
         mapping(address => uint) accrued;
     }
 

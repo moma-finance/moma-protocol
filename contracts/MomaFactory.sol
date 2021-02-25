@@ -1,18 +1,18 @@
 pragma solidity ^0.5.16;
 
-import "./CToken.sol";
-import "./Comptroller.sol";
-import "./Unitroller.sol";
+import "./MToken.sol";
+import "./MomaMaster.sol";
+import "./MomaPool.sol";
 import "./MomaFactoryInterface.sol";
 import "./FarmingDelegate.sol";
-import "./Governance/Comp.sol";
+import "./Governance/Moma.sol";
 import "./SafeMath.sol";
 
 
 contract MomaFactory is MomaFactoryInterface {
     using SafeMath for uint;
 
-    Comp public moma;
+    Moma public moma;
     FarmingDelegate public farmingDelegate;
     address public admin;
     address public feeAdmin;
@@ -50,7 +50,7 @@ contract MomaFactory is MomaFactoryInterface {
         mapping(address => bool) isMomaMarket;
 
         /// @notice A list of all markets
-        CToken[] allMarkets;
+        MToken[] allMarkets;
     }
 
     mapping(address => uint) public tokenFeeFactors;
@@ -65,12 +65,12 @@ contract MomaFactory is MomaFactoryInterface {
     }
 
     function createPool() external returns (address pool) {
-        bytes memory bytecode = type(Unitroller).creationCode;
+        bytes memory bytecode = type(MomaPool).creationCode;
         bytes32 salt = keccak256(abi.encodePacked(msg.sender));
         assembly {
             pool := create2(0, add(bytecode, 32), mload(bytecode), salt)
         }
-        IUnitroller(pool).initialize(msg.sender);
+        IMomaPool(pool).initialize(msg.sender);
         PoolInfo storage info = pools[pool];
         info.creator = msg.sender;
         info.poolFeeAdmin = feeAdmin;
@@ -206,28 +206,28 @@ contract MomaFactory is MomaFactoryInterface {
      * @notice Accrue MOMA to the market by updating the momaClaimable
      * @dev Note: lastBlocks should less than endBlock
      * @param pool The moma pool to update
-     * @param cToken The moma market to update
+     * @param mToken The moma market to update
      */
-    function updateMomaMarketStatus(address pool, CToken cToken) internal {
+    function updateMomaMarketStatus(address pool, MToken mToken) internal {
         uint blockNumber = getBlockNumber();
         PoolInfo storage info = pools[pool];
         if (info.startBlock > 0) {
-            uint lastBlock = info.lastBlocks[address(cToken)];
+            uint lastBlock = info.lastBlocks[address(mToken)];
             if (lastBlock < info.startBlock) lastBlock = info.startBlock;
             if (blockNumber > lastBlock && lastBlock < info.endBlock) {
                 uint nextBlock = blockNumber;
                 if (nextBlock > info.endBlock) nextBlock = info.endBlock;
-                uint speed = info.momaSpeeds[address(cToken)];
+                uint speed = info.momaSpeeds[address(mToken)];
                 if (speed > 0) { // lastBlock < nextBlock <= endBlock
                     uint deltaBlocks = nextBlock.sub(lastBlock);
                     uint momaAccrued = deltaBlocks.mul(speed);
-                    uint lastMomaClaimable = info.momaClaimable[address(cToken)];
+                    uint lastMomaClaimable = info.momaClaimable[address(mToken)];
                     uint newMomaClaimable = lastMomaClaimable.add(momaAccrued);
 
-                    info.momaClaimable[address(cToken)] = newMomaClaimable;
-                    emit DistributedMarketMoma(pool, address(cToken), newMomaClaimable, momaAccrued, nextBlock);
+                    info.momaClaimable[address(mToken)] = newMomaClaimable;
+                    emit DistributedMarketMoma(pool, address(mToken), newMomaClaimable, momaAccrued, nextBlock);
                 }
-                info.lastBlocks[address(cToken)] = nextBlock;
+                info.lastBlocks[address(mToken)] = nextBlock;
             }
         }
     }
@@ -251,26 +251,26 @@ contract MomaFactory is MomaFactoryInterface {
     /**
      * @notice Pool called to transfer MOMA to the user
      * @dev Note: If there is not enough MOMA, factory do not perform the transfer
-     * @param cToken The market to claim MOMA in
+     * @param mToken The market to claim MOMA in
      * @param user The address of the user to transfer MOMA to
      * @param amount The amount of MOMA to (possibly) transfer
      * @return The amount of MOMA which was NOT transferred to the user
      */
-    function claim(address cToken, address user, uint amount) external returns (uint) {
+    function claim(address mToken, address user, uint amount) external returns (uint) {
         // pool must be msg.sender
         PoolInfo storage info = pools[msg.sender];
         // only pool can claim for user
         require(info.creator != address(0), 'MomaFactory: can only claim through pool');
 
-        updateMomaMarketStatus(msg.sender, CToken(cToken));
+        updateMomaMarketStatus(msg.sender, MToken(mToken));
 
-        uint claimable = info.momaClaimable[cToken];
-        uint claimed = info.momaClaimed[cToken];
+        uint claimable = info.momaClaimable[mToken];
+        uint claimed = info.momaClaimed[mToken];
         uint newClaimed = claimed.add(amount);
         if (newClaimed > claimable) return amount;
 
         uint notTransfered = grantMomaInternal(user, amount);
-        info.momaClaimed[cToken] = newClaimed.sub(notTransfered);
+        info.momaClaimed[mToken] = newClaimed.sub(notTransfered);
         return notTransfered;
     }
 
@@ -293,7 +293,7 @@ contract MomaFactory is MomaFactoryInterface {
      * @notice Set the MOMA token, can only call once
      * @param _moma The MOMA token address
      */
-    function setMomaToken(Comp _moma) external {
+    function setMomaToken(Moma _moma) external {
         require(msg.sender == admin && address(moma) == address(0), 'MomaFactory: admin check');
         moma = _moma;
     }
@@ -314,7 +314,7 @@ contract MomaFactory is MomaFactoryInterface {
         require(info.creator != address(0), 'MomaFactory: pool not created');
         // must be lending pool?
 
-        uint err = Comptroller(pool)._setMomaFarming(_startBlock, _endBlock, reset);
+        uint err = MomaMaster(pool)._setMomaFarming(_startBlock, _endBlock, reset);
         require(err == 0, 'MomaFactory: setMomaPool failed');
 
         uint oldStartBlock = info.startBlock;
@@ -328,10 +328,10 @@ contract MomaFactory is MomaFactoryInterface {
      * @notice Set a MOMA market's speed, will also call pool to set farm speed
      * @dev Note: can call at any time, this will also update moma market status
      * @param pool The address of the pool, must be created first
-     * @param cToken The pool market to set speed
+     * @param mToken The pool market to set speed
      * @param momaSpeed The new speed, 0 means no new MOMA farm
      */
-    function setMomaSpeed(address pool, CToken cToken, uint momaSpeed) external {
+    function setMomaSpeed(address pool, MToken mToken, uint momaSpeed) external {
         require(msg.sender == admin, 'MomaFactory: admin check');
         require(address(moma) != address(0), 'MomaFactory: MOMA token not setted');
         PoolInfo storage info = pools[pool];
@@ -339,16 +339,16 @@ contract MomaFactory is MomaFactoryInterface {
         require(info.startBlock > 0, 'MomaFactory: not moma pool');
         // must be lending pool?
 
-        uint err = Comptroller(pool)._setMomaSpeed(cToken, momaSpeed);
+        uint err = MomaMaster(pool)._setMomaSpeed(mToken, momaSpeed);
         require(err == 0, 'MomaFactory: setMomaSpeed failed');
         
-        updateMomaMarketStatus(pool, cToken);
-        info.momaSpeeds[address(cToken)] = momaSpeed;
-        emit MomaMarketSpeedUpdated(pool, address(cToken), momaSpeed);
+        updateMomaMarketStatus(pool, mToken);
+        info.momaSpeeds[address(mToken)] = momaSpeed;
+        emit MomaMarketSpeedUpdated(pool, address(mToken), momaSpeed);
 
-        if (info.isMomaMarket[address(cToken)] == false) {
-            info.allMarkets.push(cToken);
-            info.isMomaMarket[address(cToken)] == true;
+        if (info.isMomaMarket[address(mToken)] == false) {
+            info.allMarkets.push(mToken);
+            info.isMomaMarket[address(mToken)] == true;
         }
     }
 
@@ -358,6 +358,6 @@ contract MomaFactory is MomaFactoryInterface {
 }
 
 
-interface IUnitroller {
+interface IMomaPool {
     function initialize(address admin_) external;
 }

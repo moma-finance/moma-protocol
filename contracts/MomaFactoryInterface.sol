@@ -24,7 +24,7 @@ interface MomaFactoryInterface {
     event MomaPoolUpdated(address indexed pool, uint oldStart, uint oldEnd, uint newStart, uint newEnd, bool reset);
 
     /// @notice Emitted when a new MOMA speed is updated for a market
-    event MomaMarketSpeedUpdated(address indexed pool, address indexed cToken, uint newSpeed);
+    event MomaMarketSpeedUpdated(address indexed pool, address indexed mToken, uint newSpeed);
 
     function moma() external view returns (address);
     function farmingDelegate() external view returns (address);
@@ -33,7 +33,7 @@ interface MomaFactoryInterface {
     function defualtFeeReceiver() external view returns (address);
     function defualtFeeFactorMantissa() external view returns (uint);
     function feeFactorMaxMantissa() external view returns (uint);
-    function claim(address cToken, address user, uint amount) external returns (uint);
+    function claim(address mToken, address user, uint amount) external returns (uint);
 
     function tokenFeeFactors(address token) external view returns (uint);
     // function pools(address pool) external view returns (PoolInfo memory);

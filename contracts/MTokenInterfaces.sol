@@ -1,9 +1,9 @@
 pragma solidity ^0.5.16;
 
-import "./ComptrollerInterface.sol";
+import "./MomaMasterInterface.sol";
 import "./InterestRateModel.sol";
 
-contract CTokenStorage {
+contract MTokenStorage {
     /**
      * @dev Guard variable for re-entrancy checks
      */
@@ -66,9 +66,9 @@ contract CTokenStorage {
     address payable public feeReceiver;
 
     /**
-     * @notice Contract which oversees inter-cToken operations
+     * @notice Contract which oversees inter-mToken operations
      */
-    ComptrollerInterface public comptroller;
+    MomaMasterInterface public momaMaster;
 
     /**
      * @notice Model which tells what the current interest rate should be
@@ -76,7 +76,7 @@ contract CTokenStorage {
     InterestRateModel public interestRateModel;
 
     /**
-     * @notice Initial exchange rate used when minting the first CTokens (used when totalSupply = 0)
+     * @notice Initial exchange rate used when minting the first MTokens (used when totalSupply = 0)
      */
     uint internal initialExchangeRateMantissa;
 
@@ -151,11 +151,11 @@ contract CTokenStorage {
     mapping(address => BorrowSnapshot) internal accountBorrows;
 }
 
-contract CTokenInterface is CTokenStorage {
+contract MTokenInterface is MTokenStorage {
     /**
-     * @notice Indicator that this is a CToken contract (for inspection)
+     * @notice Indicator that this is a MToken contract (for inspection)
      */
-    bool public constant isCToken = true;
+    bool public constant isMToken = true;
 
 
     /*** Market Events ***/
@@ -188,7 +188,7 @@ contract CTokenInterface is CTokenStorage {
     /**
      * @notice Event emitted when a borrow is liquidated
      */
-    event LiquidateBorrow(address liquidator, address borrower, uint repayAmount, address cTokenCollateral, uint seizeTokens);
+    event LiquidateBorrow(address liquidator, address borrower, uint repayAmount, address mTokenCollateral, uint seizeTokens);
 
 
     /*** Admin Events ***/
@@ -204,9 +204,9 @@ contract CTokenInterface is CTokenStorage {
     event NewAdmin(address oldAdmin, address newAdmin);
 
     /**
-     * @notice Event emitted when comptroller is changed
+     * @notice Event emitted when momaMaster is changed
      */
-    event NewComptroller(ComptrollerInterface oldComptroller, ComptrollerInterface newComptroller);
+    event NewMomaMaster(MomaMasterInterface oldMomaMaster, MomaMasterInterface newMomaMaster);
 
     /**
      * @notice Event emitted when interestRateModel is changed
@@ -295,7 +295,7 @@ contract CTokenInterface is CTokenStorage {
 
     function _setPendingAdmin(address payable newPendingAdmin) external returns (uint);
     function _acceptAdmin() external returns (uint);
-    function _setComptroller(ComptrollerInterface newComptroller) public returns (uint);
+    function _setMomaMaster(MomaMasterInterface newMomaMaster) public returns (uint);
     function _setFeeAdmin(address payable newFeeAdmin) public returns (uint);
     function _setFeeReceiver(address payable newFeeReceiver) public returns (uint);
     function _setFeeFactor(uint newFeeFactorMantissa) external returns (uint);
@@ -306,14 +306,14 @@ contract CTokenInterface is CTokenStorage {
     function _setInterestRateModel(InterestRateModel newInterestRateModel) public returns (uint);
 }
 
-contract CErc20Storage {
+contract MErc20Storage {
     /**
-     * @notice Underlying asset for this CToken
+     * @notice Underlying asset for this MToken
      */
     address public underlying;
 }
 
-contract CErc20Interface is CErc20Storage {
+contract MErc20Interface is MErc20Storage {
 
     /*** User Interface ***/
 
@@ -323,7 +323,7 @@ contract CErc20Interface is CErc20Storage {
     function borrow(uint borrowAmount) external returns (uint);
     function repayBorrow(uint repayAmount) external returns (uint);
     function repayBorrowBehalf(address borrower, uint repayAmount) external returns (uint);
-    function liquidateBorrow(address borrower, uint repayAmount, CTokenInterface cTokenCollateral) external returns (uint);
+    function liquidateBorrow(address borrower, uint repayAmount, MTokenInterface mTokenCollateral) external returns (uint);
 
 
     /*** Admin Functions ***/
@@ -331,14 +331,14 @@ contract CErc20Interface is CErc20Storage {
     function _addReserves(uint addAmount) external returns (uint);
 }
 
-contract CDelegationStorage {
+contract MDelegationStorage {
     /**
      * @notice Implementation address for this contract
      */
     address public implementation;
 }
 
-contract CDelegatorInterface is CDelegationStorage {
+contract MDelegatorInterface is MDelegationStorage {
     /**
      * @notice Emitted when implementation is changed
      */
@@ -353,7 +353,7 @@ contract CDelegatorInterface is CDelegationStorage {
     function _setImplementation(address implementation_, bool allowResign, bytes memory becomeImplementationData) public;
 }
 
-contract CDelegateInterface is CDelegationStorage {
+contract MDelegateInterface is MDelegationStorage {
     /**
      * @notice Called by the delegator on a delegate to initialize it for duty
      * @dev Should revert if any issues arise which make it unfit for delegation

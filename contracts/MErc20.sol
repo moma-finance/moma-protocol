@@ -1,17 +1,17 @@
 pragma solidity ^0.5.16;
 
-import "./CToken.sol";
+import "./MToken.sol";
 
 /**
- * @title Compound's CErc20 Contract
- * @notice CTokens which wrap an EIP-20 underlying
- * @author Compound
+ * @title Moma's MErc20 Contract
+ * @notice MTokens which wrap an EIP-20 underlying
+ * @author Moma
  */
-contract CErc20 is CToken, CErc20Interface {
+contract MErc20 is MToken, MErc20Interface {
     /**
      * @notice Initialize the new money market
      * @param underlying_ The address of the underlying asset
-     * @param comptroller_ The address of the Comptroller
+     * @param momaMaster_ The address of the momaMaster
      * @param interestRateModel_ The address of the interest rate model
      * @param initialExchangeRateMantissa_ The initial exchange rate, scaled by 1e18
      * @param name_ ERC-20 name of this token
@@ -21,7 +21,7 @@ contract CErc20 is CToken, CErc20Interface {
      * @param feeReceiver_ Address of the free receiver of this token
      */
     function initialize(address underlying_,
-                        ComptrollerInterface comptroller_,
+                        MomaMasterInterface momaMaster_,
                         InterestRateModel interestRateModel_,
                         uint initialExchangeRateMantissa_,
                         string memory name_,
@@ -29,8 +29,8 @@ contract CErc20 is CToken, CErc20Interface {
                         uint8 decimals_,
                         address payable feeAdmin_,
                         address payable feeReceiver_) public {
-        // CToken initialize does the bulk of the work
-        super.initialize(comptroller_, interestRateModel_, initialExchangeRateMantissa_, name_, symbol_, decimals_, feeAdmin_, feeReceiver_);
+        // MToken initialize does the bulk of the work
+        super.initialize(momaMaster_, interestRateModel_, initialExchangeRateMantissa_, name_, symbol_, decimals_, feeAdmin_, feeReceiver_);
 
         // Set underlying and sanity check it
         underlying = underlying_;
@@ -40,7 +40,7 @@ contract CErc20 is CToken, CErc20Interface {
     /*** User Interface ***/
 
     /**
-     * @notice Sender supplies assets into the market and receives cTokens in exchange
+     * @notice Sender supplies assets into the market and receives mTokens in exchange
      * @dev Accrues interest whether or not the operation succeeds, unless reverted
      * @param mintAmount The amount of the underlying asset to supply
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
@@ -51,9 +51,9 @@ contract CErc20 is CToken, CErc20Interface {
     }
 
     /**
-     * @notice Sender redeems cTokens in exchange for the underlying asset
+     * @notice Sender redeems mTokens in exchange for the underlying asset
      * @dev Accrues interest whether or not the operation succeeds, unless reverted
-     * @param redeemTokens The number of cTokens to redeem into underlying
+     * @param redeemTokens The number of mTokens to redeem into underlying
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
     function redeem(uint redeemTokens) external returns (uint) {
@@ -61,7 +61,7 @@ contract CErc20 is CToken, CErc20Interface {
     }
 
     /**
-     * @notice Sender redeems cTokens in exchange for a specified amount of underlying asset
+     * @notice Sender redeems mTokens in exchange for a specified amount of underlying asset
      * @dev Accrues interest whether or not the operation succeeds, unless reverted
      * @param redeemAmount The amount of underlying to redeem
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
@@ -103,13 +103,13 @@ contract CErc20 is CToken, CErc20Interface {
     /**
      * @notice The sender liquidates the borrowers collateral.
      *  The collateral seized is transferred to the liquidator.
-     * @param borrower The borrower of this cToken to be liquidated
+     * @param borrower The borrower of this mToken to be liquidated
      * @param repayAmount The amount of the underlying borrowed asset to repay
-     * @param cTokenCollateral The market in which to seize collateral from the borrower
+     * @param mTokenCollateral The market in which to seize collateral from the borrower
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
-    function liquidateBorrow(address borrower, uint repayAmount, CTokenInterface cTokenCollateral) external returns (uint) {
-        (uint err,) = liquidateBorrowInternal(borrower, repayAmount, cTokenCollateral);
+    function liquidateBorrow(address borrower, uint repayAmount, MTokenInterface mTokenCollateral) external returns (uint) {
+        (uint err,) = liquidateBorrowInternal(borrower, repayAmount, mTokenCollateral);
         return err;
     }
 
@@ -139,7 +139,7 @@ contract CErc20 is CToken, CErc20Interface {
      * @return The momaFeeFactorMantissa of this market set by factory contract
      */
     function getMomaFeeFactorMantissa() internal view returns (uint) {
-        return MomaFactoryInterface(factory()).getMomaFeeFactorMantissa(address(comptroller), underlying);
+        return MomaFactoryInterface(factory()).getMomaFeeFactorMantissa(address(momaMaster), underlying);
     }
 
     /**

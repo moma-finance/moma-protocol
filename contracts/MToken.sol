@@ -1,7 +1,7 @@
 pragma solidity ^0.5.16;
 
-import "./ComptrollerInterface.sol";
-import "./CTokenInterfaces.sol";
+import "./MomaMasterInterface.sol";
+import "./MTokenInterfaces.sol";
 import "./ErrorReporter.sol";
 import "./Exponential.sol";
 import "./EIP20Interface.sol";
@@ -10,14 +10,14 @@ import "./InterestRateModel.sol";
 import "./MomaFactoryInterface.sol";
 
 /**
- * @title Compound's CToken Contract
- * @notice Abstract base for CTokens
- * @author Compound
+ * @title Moma's MToken Contract
+ * @notice Abstract base for MTokens
+ * @author Moma
  */
-contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
+contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
     /**
      * @notice Initialize the money market
-     * @param comptroller_ The address of the Comptroller
+     * @param momaMaster_ The address of the MomaMaster
      * @param interestRateModel_ The address of the interest rate model
      * @param initialExchangeRateMantissa_ The initial exchange rate, scaled by 1e18
      * @param name_ EIP-20 name of this token
@@ -26,7 +26,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
      * @param feeAdmin_ Address of the fee administrator of this token
      * @param feeReceiver_ Address of the free receiver of this token
      */
-    function initialize(ComptrollerInterface comptroller_,
+    function initialize(MomaMasterInterface momaMaster_,
                         InterestRateModel interestRateModel_,
                         uint initialExchangeRateMantissa_,
                         string memory name_,
@@ -41,11 +41,11 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
         initialExchangeRateMantissa = initialExchangeRateMantissa_;
         require(initialExchangeRateMantissa > 0, "initial exchange rate must be greater than zero.");
 
-        // Set the comptroller
-        uint err = _setComptroller(comptroller_);
-        require(err == uint(Error.NO_ERROR), "setting comptroller failed");
+        // Set the momaMaster
+        uint err = _setMomaMaster(momaMaster_);
+        require(err == uint(Error.NO_ERROR), "setting momaMaster failed");
 
-        // Initialize block number and borrow index (block number mocks depend on comptroller being set)
+        // Initialize block number and borrow index (block number mocks depend on momaMaster being set)
         accrualBlockNumber = getBlockNumber();
         borrowIndex = mantissaOne;
 
@@ -64,11 +64,11 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
     }
 
     /**
-     * @notice Read the factory address from comptroller
+     * @notice Read the factory address from momaMaster
      * @return Factory address
      */
     function factory() public view returns (address) {
-        return comptroller.factory();
+        return momaMaster.factory();
     }
 
     /**
@@ -82,9 +82,9 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
      */
     function transferTokens(address spender, address src, address dst, uint tokens) internal returns (uint) {
         /* Fail if transfer not allowed */
-        uint allowed = comptroller.transferAllowed(address(this), src, dst, tokens);
+        uint allowed = momaMaster.transferAllowed(address(this), src, dst, tokens);
         if (allowed != 0) {
-            return failOpaque(Error.COMPTROLLER_REJECTION, FailureInfo.TRANSFER_COMPTROLLER_REJECTION, allowed);
+            return failOpaque(Error.MOMAMASTER_REJECTION, FailureInfo.TRANSFER_MOMAMASTER_REJECTION, allowed);
         }
 
         /* Do not allow self-transfers */
@@ -136,7 +136,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
         /* We emit a Transfer event */
         emit Transfer(src, dst, tokens);
 
-        comptroller.transferVerify(address(this), src, dst, tokens);
+        momaMaster.transferVerify(address(this), src, dst, tokens);
 
         return uint(Error.NO_ERROR);
     }
@@ -211,12 +211,12 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
 
     /**
      * @notice Get a snapshot of the account's balances, and the cached exchange rate
-     * @dev This is used by comptroller to more efficiently perform liquidity checks.
+     * @dev This is used by momaMaster to more efficiently perform liquidity checks.
      * @param account Address of the account to snapshot
      * @return (possible error, token balance, borrow balance, exchange rate mantissa)
      */
     function getAccountSnapshot(address account) external view returns (uint, uint, uint, uint) {
-        uint cTokenBalance = accountTokens[account];
+        uint mTokenBalance = accountTokens[account];
         uint borrowBalance;
         uint exchangeRateMantissa;
 
@@ -232,7 +232,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
             return (uint(Error.MATH_ERROR), 0, 0, 0);
         }
 
-        return (uint(Error.NO_ERROR), cTokenBalance, borrowBalance, exchangeRateMantissa);
+        return (uint(Error.NO_ERROR), mTokenBalance, borrowBalance, exchangeRateMantissa);
     }
 
     /**
@@ -244,7 +244,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
     }
 
     /**
-     * @notice Returns the current per-block borrow interest rate for this cToken
+     * @notice Returns the current per-block borrow interest rate for this mToken
      * @return The borrow interest rate per block, scaled by 1e18
      */
     function borrowRatePerBlock() external view returns (uint) {
@@ -252,7 +252,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
     }
 
     /**
-     * @notice Returns the current per-block supply interest rate for this cToken
+     * @notice Returns the current per-block supply interest rate for this mToken
      * @return The supply interest rate per block, scaled by 1e18
      */
     function supplyRatePerBlock() external view returns (uint) {
@@ -345,7 +345,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
     }
 
     /**
-     * @notice Calculates the exchange rate from the underlying to the CToken
+     * @notice Calculates the exchange rate from the underlying to the MToken
      * @dev This function does not accrue interest before calculating the exchange rate
      * @return Calculated exchange rate scaled by 1e18
      */
@@ -356,7 +356,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
     }
 
     /**
-     * @notice Calculates the exchange rate from the underlying to the CToken
+     * @notice Calculates the exchange rate from the underlying to the MToken
      * @dev This function does not accrue interest before calculating the exchange rate
      * @return (error code, calculated exchange rate scaled by 1e18)
      */
@@ -405,7 +405,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
     }
 
     /**
-     * @notice Get cash balance of this cToken in the underlying asset
+     * @notice Get cash balance of this mToken in the underlying asset
      * @return The quantity of underlying asset owned by this contract
      */
     function getCash() external view returns (uint) {
@@ -528,7 +528,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
     }
 
     /**
-     * @notice Sender supplies assets into the market and receives cTokens in exchange
+     * @notice Sender supplies assets into the market and receives mTokens in exchange
      * @dev Accrues interest whether or not the operation succeeds, unless reverted
      * @param mintAmount The amount of the underlying asset to supply
      * @return (uint, uint) An error code (0=success, otherwise a failure, see ErrorReporter.sol), and the actual mint amount.
@@ -554,7 +554,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
     }
 
     /**
-     * @notice User supplies assets into the market and receives cTokens in exchange
+     * @notice User supplies assets into the market and receives mTokens in exchange
      * @dev Assumes interest has already been accrued up to the current block
      * @param minter The address of the account which is supplying the assets
      * @param mintAmount The amount of the underlying asset to supply
@@ -562,9 +562,9 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
      */
     function mintFresh(address minter, uint mintAmount) internal returns (uint, uint) {
         /* Fail if mint not allowed */
-        uint allowed = comptroller.mintAllowed(address(this), minter, mintAmount);
+        uint allowed = momaMaster.mintAllowed(address(this), minter, mintAmount);
         if (allowed != 0) {
-            return (failOpaque(Error.COMPTROLLER_REJECTION, FailureInfo.MINT_COMPTROLLER_REJECTION, allowed), 0);
+            return (failOpaque(Error.MOMAMASTER_REJECTION, FailureInfo.MINT_MOMAMASTER_REJECTION, allowed), 0);
         }
 
         /* Verify market's block number equals current block number */
@@ -585,16 +585,16 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
 
         /*
          *  We call `doTransferIn` for the minter and the mintAmount.
-         *  Note: The cToken must handle variations between ERC-20 and ETH underlying.
+         *  Note: The mToken must handle variations between ERC-20 and ETH underlying.
          *  `doTransferIn` reverts if anything goes wrong, since we can't be sure if
          *  side-effects occurred. The function returns the amount actually transferred,
-         *  in case of a fee. On success, the cToken holds an additional `actualMintAmount`
+         *  in case of a fee. On success, the mToken holds an additional `actualMintAmount`
          *  of cash.
          */
         vars.actualMintAmount = doTransferIn(minter, mintAmount);
 
         /*
-         * We get the current exchange rate and calculate the number of cTokens to be minted:
+         * We get the current exchange rate and calculate the number of mTokens to be minted:
          *  mintTokens = actualMintAmount / exchangeRate
          */
 
@@ -602,7 +602,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
         require(vars.mathErr == MathError.NO_ERROR, "MINT_EXCHANGE_CALCULATION_FAILED");
 
         /*
-         * We calculate the new total supply of cTokens and minter token balance, checking for overflow:
+         * We calculate the new total supply of mTokens and minter token balance, checking for overflow:
          *  totalSupplyNew = totalSupply + mintTokens
          *  accountTokensNew = accountTokens[minter] + mintTokens
          */
@@ -621,15 +621,15 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
         emit Transfer(address(this), minter, vars.mintTokens);
 
         /* We call the defense hook */
-        comptroller.mintVerify(address(this), minter, vars.actualMintAmount, vars.mintTokens);
+        momaMaster.mintVerify(address(this), minter, vars.actualMintAmount, vars.mintTokens);
 
         return (uint(Error.NO_ERROR), vars.actualMintAmount);
     }
 
     /**
-     * @notice Sender redeems cTokens in exchange for the underlying asset
+     * @notice Sender redeems mTokens in exchange for the underlying asset
      * @dev Accrues interest whether or not the operation succeeds, unless reverted
-     * @param redeemTokens The number of cTokens to redeem into underlying
+     * @param redeemTokens The number of mTokens to redeem into underlying
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
     function redeemInternal(uint redeemTokens) internal nonReentrant returns (uint) {
@@ -643,9 +643,9 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
     }
 
     /**
-     * @notice Sender redeems cTokens in exchange for a specified amount of underlying asset
+     * @notice Sender redeems mTokens in exchange for a specified amount of underlying asset
      * @dev Accrues interest whether or not the operation succeeds, unless reverted
-     * @param redeemAmount The amount of underlying to receive from redeeming cTokens
+     * @param redeemAmount The amount of underlying to receive from redeeming mTokens
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
     function redeemUnderlyingInternal(uint redeemAmount) internal nonReentrant returns (uint) {
@@ -669,11 +669,11 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
     }
 
     /**
-     * @notice User redeems cTokens in exchange for the underlying asset
+     * @notice User redeems mTokens in exchange for the underlying asset
      * @dev Assumes interest has already been accrued up to the current block
      * @param redeemer The address of the account which is redeeming the tokens
-     * @param redeemTokensIn The number of cTokens to redeem into underlying (only one of redeemTokensIn or redeemAmountIn may be non-zero)
-     * @param redeemAmountIn The number of underlying tokens to receive from redeeming cTokens (only one of redeemTokensIn or redeemAmountIn may be non-zero)
+     * @param redeemTokensIn The number of mTokens to redeem into underlying (only one of redeemTokensIn or redeemAmountIn may be non-zero)
+     * @param redeemAmountIn The number of underlying tokens to receive from redeeming mTokens (only one of redeemTokensIn or redeemAmountIn may be non-zero)
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
     function redeemFresh(address payable redeemer, uint redeemTokensIn, uint redeemAmountIn) internal returns (uint) {
@@ -716,9 +716,9 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
         }
 
         /* Fail if redeem not allowed */
-        uint allowed = comptroller.redeemAllowed(address(this), redeemer, vars.redeemTokens);
+        uint allowed = momaMaster.redeemAllowed(address(this), redeemer, vars.redeemTokens);
         if (allowed != 0) {
-            return failOpaque(Error.COMPTROLLER_REJECTION, FailureInfo.REDEEM_COMPTROLLER_REJECTION, allowed);
+            return failOpaque(Error.MOMAMASTER_REJECTION, FailureInfo.REDEEM_MOMAMASTER_REJECTION, allowed);
         }
 
         /* Verify market's block number equals current block number */
@@ -752,8 +752,8 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
 
         /*
          * We invoke doTransferOut for the redeemer and the redeemAmount.
-         *  Note: The cToken must handle variations between ERC-20 and ETH underlying.
-         *  On success, the cToken has redeemAmount less of cash.
+         *  Note: The mToken must handle variations between ERC-20 and ETH underlying.
+         *  On success, the mToken has redeemAmount less of cash.
          *  doTransferOut reverts if anything goes wrong, since we can't be sure if side effects occurred.
          */
         doTransferOut(redeemer, vars.redeemAmount);
@@ -767,7 +767,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
         emit Redeem(redeemer, vars.redeemAmount, vars.redeemTokens);
 
         /* We call the defense hook */
-        comptroller.redeemVerify(address(this), redeemer, vars.redeemAmount, vars.redeemTokens);
+        momaMaster.redeemVerify(address(this), redeemer, vars.redeemAmount, vars.redeemTokens);
 
         return uint(Error.NO_ERROR);
     }
@@ -801,9 +801,9 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
       */
     function borrowFresh(address payable borrower, uint borrowAmount) internal returns (uint) {
         /* Fail if borrow not allowed */
-        uint allowed = comptroller.borrowAllowed(address(this), borrower, borrowAmount);
+        uint allowed = momaMaster.borrowAllowed(address(this), borrower, borrowAmount);
         if (allowed != 0) {
-            return failOpaque(Error.COMPTROLLER_REJECTION, FailureInfo.BORROW_COMPTROLLER_REJECTION, allowed);
+            return failOpaque(Error.MOMAMASTER_REJECTION, FailureInfo.BORROW_MOMAMASTER_REJECTION, allowed);
         }
 
         /* Verify market's block number equals current block number */
@@ -844,8 +844,8 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
 
         /*
          * We invoke doTransferOut for the borrower and the borrowAmount.
-         *  Note: The cToken must handle variations between ERC-20 and ETH underlying.
-         *  On success, the cToken borrowAmount less of cash.
+         *  Note: The mToken must handle variations between ERC-20 and ETH underlying.
+         *  On success, the mToken borrowAmount less of cash.
          *  doTransferOut reverts if anything goes wrong, since we can't be sure if side effects occurred.
          */
         doTransferOut(borrower, borrowAmount);
@@ -859,7 +859,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
         emit Borrow(borrower, borrowAmount, vars.accountBorrowsNew, vars.totalBorrowsNew);
 
         /* We call the defense hook */
-        comptroller.borrowVerify(address(this), borrower, borrowAmount);
+        momaMaster.borrowVerify(address(this), borrower, borrowAmount);
 
         return uint(Error.NO_ERROR);
     }
@@ -915,9 +915,9 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
      */
     function repayBorrowFresh(address payer, address borrower, uint repayAmount) internal returns (uint, uint) {
         /* Fail if repayBorrow not allowed */
-        uint allowed = comptroller.repayBorrowAllowed(address(this), payer, borrower, repayAmount);
+        uint allowed = momaMaster.repayBorrowAllowed(address(this), payer, borrower, repayAmount);
         if (allowed != 0) {
-            return (failOpaque(Error.COMPTROLLER_REJECTION, FailureInfo.REPAY_BORROW_COMPTROLLER_REJECTION, allowed), 0);
+            return (failOpaque(Error.MOMAMASTER_REJECTION, FailureInfo.REPAY_BORROW_MOMAMASTER_REJECTION, allowed), 0);
         }
 
         /* Verify market's block number equals current block number */
@@ -949,8 +949,8 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
 
         /*
          * We call doTransferIn for the payer and the repayAmount
-         *  Note: The cToken must handle variations between ERC-20 and ETH underlying.
-         *  On success, the cToken holds an additional repayAmount of cash.
+         *  Note: The mToken must handle variations between ERC-20 and ETH underlying.
+         *  On success, the mToken holds an additional repayAmount of cash.
          *  doTransferIn reverts if anything goes wrong, since we can't be sure if side effects occurred.
          *   it returns the amount actually transferred, in case of a fee.
          */
@@ -976,7 +976,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
         emit RepayBorrow(payer, borrower, vars.actualRepayAmount, vars.accountBorrowsNew, vars.totalBorrowsNew);
 
         /* We call the defense hook */
-        comptroller.repayBorrowVerify(address(this), payer, borrower, vars.actualRepayAmount, vars.borrowerIndex);
+        momaMaster.repayBorrowVerify(address(this), payer, borrower, vars.actualRepayAmount, vars.borrowerIndex);
 
         return (uint(Error.NO_ERROR), vars.actualRepayAmount);
     }
@@ -984,42 +984,42 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
     /**
      * @notice The sender liquidates the borrowers collateral.
      *  The collateral seized is transferred to the liquidator.
-     * @param borrower The borrower of this cToken to be liquidated
-     * @param cTokenCollateral The market in which to seize collateral from the borrower
+     * @param borrower The borrower of this mToken to be liquidated
+     * @param mTokenCollateral The market in which to seize collateral from the borrower
      * @param repayAmount The amount of the underlying borrowed asset to repay
      * @return (uint, uint) An error code (0=success, otherwise a failure, see ErrorReporter.sol), and the actual repayment amount.
      */
-    function liquidateBorrowInternal(address borrower, uint repayAmount, CTokenInterface cTokenCollateral) internal nonReentrant returns (uint, uint) {
+    function liquidateBorrowInternal(address borrower, uint repayAmount, MTokenInterface mTokenCollateral) internal nonReentrant returns (uint, uint) {
         uint error = accrueInterest();
         if (error != uint(Error.NO_ERROR)) {
             // accrueInterest emits logs on errors, but we still want to log the fact that an attempted liquidation failed
             return (fail(Error(error), FailureInfo.LIQUIDATE_ACCRUE_BORROW_INTEREST_FAILED), 0);
         }
 
-        error = cTokenCollateral.accrueInterest();
+        error = mTokenCollateral.accrueInterest();
         if (error != uint(Error.NO_ERROR)) {
             // accrueInterest emits logs on errors, but we still want to log the fact that an attempted liquidation failed
             return (fail(Error(error), FailureInfo.LIQUIDATE_ACCRUE_COLLATERAL_INTEREST_FAILED), 0);
         }
 
         // liquidateBorrowFresh emits borrow-specific logs on errors, so we don't need to
-        return liquidateBorrowFresh(msg.sender, borrower, repayAmount, cTokenCollateral);
+        return liquidateBorrowFresh(msg.sender, borrower, repayAmount, mTokenCollateral);
     }
 
     /**
      * @notice The liquidator liquidates the borrowers collateral.
      *  The collateral seized is transferred to the liquidator.
-     * @param borrower The borrower of this cToken to be liquidated
+     * @param borrower The borrower of this mToken to be liquidated
      * @param liquidator The address repaying the borrow and seizing collateral
-     * @param cTokenCollateral The market in which to seize collateral from the borrower
+     * @param mTokenCollateral The market in which to seize collateral from the borrower
      * @param repayAmount The amount of the underlying borrowed asset to repay
      * @return (uint, uint) An error code (0=success, otherwise a failure, see ErrorReporter.sol), and the actual repayment amount.
      */
-    function liquidateBorrowFresh(address liquidator, address borrower, uint repayAmount, CTokenInterface cTokenCollateral) internal returns (uint, uint) {
+    function liquidateBorrowFresh(address liquidator, address borrower, uint repayAmount, MTokenInterface mTokenCollateral) internal returns (uint, uint) {
         /* Fail if liquidate not allowed */
-        uint allowed = comptroller.liquidateBorrowAllowed(address(this), address(cTokenCollateral), liquidator, borrower, repayAmount);
+        uint allowed = momaMaster.liquidateBorrowAllowed(address(this), address(mTokenCollateral), liquidator, borrower, repayAmount);
         if (allowed != 0) {
-            return (failOpaque(Error.COMPTROLLER_REJECTION, FailureInfo.LIQUIDATE_COMPTROLLER_REJECTION, allowed), 0);
+            return (failOpaque(Error.MOMAMASTER_REJECTION, FailureInfo.LIQUIDATE_MOMAMASTER_REJECTION, allowed), 0);
         }
 
         /* Verify market's block number equals current block number */
@@ -1027,8 +1027,8 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
             return (fail(Error.MARKET_NOT_FRESH, FailureInfo.LIQUIDATE_FRESHNESS_CHECK), 0);
         }
 
-        /* Verify cTokenCollateral market's block number equals current block number */
-        if (cTokenCollateral.accrualBlockNumber() != getBlockNumber()) {
+        /* Verify mTokenCollateral market's block number equals current block number */
+        if (mTokenCollateral.accrualBlockNumber() != getBlockNumber()) {
             return (fail(Error.MARKET_NOT_FRESH, FailureInfo.LIQUIDATE_COLLATERAL_FRESHNESS_CHECK), 0);
         }
 
@@ -1059,39 +1059,39 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
         // (No safe failures beyond this point)
 
         /* We calculate the number of collateral tokens that will be seized */
-        (uint amountSeizeError, uint seizeTokens) = comptroller.liquidateCalculateSeizeTokens(address(this), address(cTokenCollateral), actualRepayAmount);
-        require(amountSeizeError == uint(Error.NO_ERROR), "LIQUIDATE_COMPTROLLER_CALCULATE_AMOUNT_SEIZE_FAILED");
+        (uint amountSeizeError, uint seizeTokens) = momaMaster.liquidateCalculateSeizeTokens(address(this), address(mTokenCollateral), actualRepayAmount);
+        require(amountSeizeError == uint(Error.NO_ERROR), "LIQUIDATE_MOMAMASTER_CALCULATE_AMOUNT_SEIZE_FAILED");
 
         /* Revert if borrower collateral token balance < seizeTokens */
-        require(cTokenCollateral.balanceOf(borrower) >= seizeTokens, "LIQUIDATE_SEIZE_TOO_MUCH");
+        require(mTokenCollateral.balanceOf(borrower) >= seizeTokens, "LIQUIDATE_SEIZE_TOO_MUCH");
 
         // If this is also the collateral, run seizeInternal to avoid re-entrancy, otherwise make an external call
         uint seizeError;
-        if (address(cTokenCollateral) == address(this)) {
+        if (address(mTokenCollateral) == address(this)) {
             seizeError = seizeInternal(address(this), liquidator, borrower, seizeTokens);
         } else {
-            seizeError = cTokenCollateral.seize(liquidator, borrower, seizeTokens);
+            seizeError = mTokenCollateral.seize(liquidator, borrower, seizeTokens);
         }
 
         /* Revert if seize tokens fails (since we cannot be sure of side effects) */
         require(seizeError == uint(Error.NO_ERROR), "token seizure failed");
 
         /* We emit a LiquidateBorrow event */
-        emit LiquidateBorrow(liquidator, borrower, actualRepayAmount, address(cTokenCollateral), seizeTokens);
+        emit LiquidateBorrow(liquidator, borrower, actualRepayAmount, address(mTokenCollateral), seizeTokens);
 
         /* We call the defense hook */
-        comptroller.liquidateBorrowVerify(address(this), address(cTokenCollateral), liquidator, borrower, actualRepayAmount, seizeTokens);
+        momaMaster.liquidateBorrowVerify(address(this), address(mTokenCollateral), liquidator, borrower, actualRepayAmount, seizeTokens);
 
         return (uint(Error.NO_ERROR), actualRepayAmount);
     }
 
     /**
      * @notice Transfers collateral tokens (this market) to the liquidator.
-     * @dev Will fail unless called by another cToken during the process of liquidation.
-     *  Its absolutely critical to use msg.sender as the borrowed cToken and not a parameter.
+     * @dev Will fail unless called by another mToken during the process of liquidation.
+     *  Its absolutely critical to use msg.sender as the borrowed mToken and not a parameter.
      * @param liquidator The account receiving seized collateral
      * @param borrower The account having collateral seized
-     * @param seizeTokens The number of cTokens to seize
+     * @param seizeTokens The number of mTokens to seize
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
     function seize(address liquidator, address borrower, uint seizeTokens) external nonReentrant returns (uint) {
@@ -1100,19 +1100,19 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
 
     /**
      * @notice Transfers collateral tokens (this market) to the liquidator.
-     * @dev Called only during an in-kind liquidation, or by liquidateBorrow during the liquidation of another CToken.
-     *  Its absolutely critical to use msg.sender as the seizer cToken and not a parameter.
-     * @param seizerToken The contract seizing the collateral (i.e. borrowed cToken)
+     * @dev Called only during an in-kind liquidation, or by liquidateBorrow during the liquidation of another MToken.
+     *  Its absolutely critical to use msg.sender as the seizer mToken and not a parameter.
+     * @param seizerToken The contract seizing the collateral (i.e. borrowed mToken)
      * @param liquidator The account receiving seized collateral
      * @param borrower The account having collateral seized
-     * @param seizeTokens The number of cTokens to seize
+     * @param seizeTokens The number of mTokens to seize
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
     function seizeInternal(address seizerToken, address liquidator, address borrower, uint seizeTokens) internal returns (uint) {
         /* Fail if seize not allowed */
-        uint allowed = comptroller.seizeAllowed(address(this), seizerToken, liquidator, borrower, seizeTokens);
+        uint allowed = momaMaster.seizeAllowed(address(this), seizerToken, liquidator, borrower, seizeTokens);
         if (allowed != 0) {
-            return failOpaque(Error.COMPTROLLER_REJECTION, FailureInfo.LIQUIDATE_SEIZE_COMPTROLLER_REJECTION, allowed);
+            return failOpaque(Error.MOMAMASTER_REJECTION, FailureInfo.LIQUIDATE_SEIZE_MOMAMASTER_REJECTION, allowed);
         }
 
         /* Fail if borrower = liquidator */
@@ -1151,7 +1151,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
         emit Transfer(borrower, liquidator, seizeTokens);
 
         /* We call the defense hook */
-        comptroller.seizeVerify(address(this), seizerToken, liquidator, borrower, seizeTokens);
+        momaMaster.seizeVerify(address(this), seizerToken, liquidator, borrower, seizeTokens);
 
         return uint(Error.NO_ERROR);
     }
@@ -1211,25 +1211,25 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
     }
 
     /**
-      * @notice Sets a new comptroller for the market
-      * @dev Admin function to set a new comptroller
+      * @notice Sets a new momaMaster for the market
+      * @dev Admin function to set a new momaMaster
       * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
       */
-    function _setComptroller(ComptrollerInterface newComptroller) public returns (uint) {
+    function _setMomaMaster(MomaMasterInterface newMomaMaster) public returns (uint) {
         // Check caller is admin
         if (msg.sender != admin) {
-            return fail(Error.UNAUTHORIZED, FailureInfo.SET_COMPTROLLER_OWNER_CHECK);
+            return fail(Error.UNAUTHORIZED, FailureInfo.SET_MOMAMASTER_OWNER_CHECK);
         }
 
-        ComptrollerInterface oldComptroller = comptroller;
-        // Ensure invoke comptroller.isComptroller() returns true
-        require(newComptroller.isComptroller(), "marker method returned false");
+        MomaMasterInterface oldMomaMaster = momaMaster;
+        // Ensure invoke momaMaster.isMomaMaster() returns true
+        require(newMomaMaster.isMomaMaster(), "marker method returned false");
 
-        // Set market's comptroller to newComptroller
-        comptroller = newComptroller;
+        // Set market's momaMaster to newMomaMaster
+        momaMaster = newMomaMaster;
 
-        // Emit NewComptroller(oldComptroller, newComptroller)
-        emit NewComptroller(oldComptroller, newComptroller);
+        // Emit NewMomaMaster(oldMomaMaster, newMomaMaster)
+        emit NewMomaMaster(oldMomaMaster, newMomaMaster);
 
         return uint(Error.NO_ERROR);
     }
@@ -1469,7 +1469,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
         }
 
         // Read the current moma fee receiver from factory
-        address payable momaFeeReceiver = MomaFactoryInterface(factory()).getMomaFeeReceiver(address(comptroller));
+        address payable momaFeeReceiver = MomaFactoryInterface(factory()).getMomaFeeReceiver(address(momaMaster));
 
         /////////////////////////
         // EFFECTS & INTERACTIONS
@@ -1573,8 +1573,8 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
 
         /*
          * We call doTransferIn for the caller and the addAmount
-         *  Note: The cToken must handle variations between ERC-20 and ETH underlying.
-         *  On success, the cToken holds an additional addAmount of cash.
+         *  Note: The mToken must handle variations between ERC-20 and ETH underlying.
+         *  On success, the mToken holds an additional addAmount of cash.
          *  doTransferIn reverts if anything goes wrong, since we can't be sure if side effects occurred.
          *  it returns the amount actually transferred, in case of a fee.
          */

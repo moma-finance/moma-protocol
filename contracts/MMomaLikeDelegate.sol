@@ -1,21 +1,21 @@
 pragma solidity ^0.5.16;
 
-import "./CErc20Delegate.sol";
+import "./MErc20Delegate.sol";
 
 interface CompLike {
   function delegate(address delegatee) external;
 }
 
 /**
- * @title Compound's CCompLikeDelegate Contract
- * @notice CTokens which can 'delegate votes' of their underlying ERC-20
- * @author Compound
+ * @title Moma's MMomaLikeDelegate Contract
+ * @notice MTokens which can 'delegate votes' of their underlying ERC-20
+ * @author Moma
  */
-contract CCompLikeDelegate is CErc20Delegate {
+contract MMomaLikeDelegate is MErc20Delegate {
   /**
    * @notice Construct an empty delegate
    */
-  constructor() public CErc20Delegate() {}
+  constructor() public MErc20Delegate() {}
 
   /**
    * @notice Admin call to delegate the votes of the COMP-like underlying
