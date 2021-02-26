@@ -1194,6 +1194,28 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
         delegateToFarming(abi.encodeWithSignature("claimToken(address[],address[],address[],bool,bool)", holders, mTokens, tokens, borrowers, suppliers));
     }
 
+    /**
+     * @notice Calculate all the tokens accrued by holder in all markets
+     * @param holder The address to claim tokens for
+     */
+    function tokenClaimable(address holder) public view returns (uint[] memory) {
+        return tokenClaimable(holder, allMarkets, allTokens, true, true);
+    }
+
+    /**
+     * @notice Calculate all the tokens accrued by the holder
+     * @param holder The address to claim tokens for
+     * @param mTokens The list of markets to claim tokens in
+     * @param tokens The list of tokens to claim
+     * @param borrowers Whether or not to claim tokens earned by borrowing
+     * @param suppliers Whether or not to claim tokens earned by supplying
+     * @return The list amount of token the user can claim
+     */
+    function tokenClaimable(address holder, MToken[] memory mTokens, address[] memory tokens, bool borrowers, bool suppliers) public view returns (uint[] memory) {
+        bytes memory data = delegateToFarmingView(abi.encodeWithSignature("tokenClaimable(address,address[],address[],bool,bool)", holder, mTokens, tokens, borrowers, suppliers));
+        return abi.decode(data, (uint[]));
+    }
+
 
     /*** Token Distribution Admin ***/
 
@@ -1307,6 +1329,27 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
      */
     function claimMoma(address[] memory holders, MToken[] memory mTokens, bool borrowers, bool suppliers) public {
         delegateToFarming(abi.encodeWithSignature("claimMoma(address[],address[],bool,bool)", holders, mTokens, borrowers, suppliers));
+    }
+
+    /**
+     * @notice Calculate all the MOMA accrued by holder in all markets
+     * @param holder The address to claim MOMA for
+     */
+    function momaClaimable(address holder) public view returns (uint) {
+        return momaClaimable(holder, allMarkets, true, true);
+    }
+
+    /**
+     * @notice Calculate MOMA accrued by the holder
+     * @param holder The address to claim MOMA for
+     * @param mTokens The list of markets to claim MOMA in
+     * @param borrowers Whether or not to claim MOMA earned by borrowing
+     * @param suppliers Whether or not to claim MOMA earned by supplying
+     * @return The amount of MOMA the user can claim
+     */
+    function momaClaimable(address holder, MToken[] memory mTokens, bool borrowers, bool suppliers) public view returns (uint) {
+        bytes memory data = delegateToFarmingView(abi.encodeWithSignature("momaClaimable(address,address[],bool,bool)", holder, mTokens, borrowers, suppliers));
+        return abi.decode(data, (uint));
     }
 
 
@@ -1425,5 +1468,22 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
             }
         }
         return returnData;
+    }
+
+    /**
+     * @notice Internal method to delegate view execution to farming contract
+     * @dev It returns to the external caller whatever the implementation returns or forwards reverts
+     *  There are an additional 2 prefix uints from the wrapper returndata, which we ignore since we make an extra hop.
+     * @param data The raw data to delegatecall
+     * @return The returned bytes from the delegatecall
+     */
+    function delegateToFarmingView(bytes memory data) internal view returns (bytes memory) {
+        (bool success, bytes memory returnData) = address(this).staticcall(abi.encodeWithSignature("delegateToFarming(bytes)", data));
+        assembly {
+            if eq(success, 0) {
+                revert(add(returnData, 0x20), returndatasize)
+            }
+        }
+        return abi.decode(returnData, (bytes));
     }
 }

@@ -261,6 +261,7 @@ contract MomaFactory is MomaFactoryInterface {
         PoolInfo storage info = pools[msg.sender];
         // only pool can claim for user
         require(info.creator != address(0), 'MomaFactory: can only claim through pool');
+        require(info.isMomaMarket[mToken], "MomaFactory: not MOMA market"); // maybe unnecessary
 
         updateMomaMarketStatus(msg.sender, MToken(mToken));
 
