@@ -1431,6 +1431,15 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
             return fail(Error(error), FailureInfo.COLLECT_MOMA_FEES_ACCRUE_INTEREST_FAILED);
         }
         // _collectMomaFeesFresh emits collect-moma-fee-specific logs on errors, so we don't need to.
+
+        // Read the current moma fee admin and receiver from factory
+        MomaFactoryInterface fct = MomaFactoryInterface(factory());
+        address momaFeeAdmin = fct.getMomaFeeAdmin(address(momaMaster));
+        address payable momaFeeReceiver = fct.getMomaFeeReceiver(address(momaMaster));
+        // Check caller is momaFeeAdmin or momaFeeReceiver
+        if (msg.sender != momaFeeAdmin && msg.sender != momaFeeReceiver) {
+            return fail(Error.UNAUTHORIZED, FailureInfo.COLLECT_MOMA_FEES_ADMIN_CHECK);
+        }
         return _collectMomaFeesFresh(collectAmount);
     }
 

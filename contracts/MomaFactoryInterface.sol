@@ -41,6 +41,7 @@ interface MomaFactoryInterface {
 
     function createPool() external returns (address);
     function allPoolsLength() external view returns (uint);
+    function getMomaFeeAdmin(address pool) external view returns (address);
     function getMomaFeeReceiver(address pool) external view returns (address payable);
     function getMomaFeeFactorMantissa(address pool, address underlying) external view returns (uint);
 

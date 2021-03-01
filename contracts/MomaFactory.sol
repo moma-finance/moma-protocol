@@ -17,8 +17,8 @@ contract MomaFactory is MomaFactoryInterface {
     address public admin;
     address public feeAdmin;
     address payable public defualtFeeReceiver;
-    uint public defualtFeeFactorMantissa = 0.01e18;
-    uint public constant feeFactorMaxMantissa = 0.1e18;
+    uint public defualtFeeFactorMantissa;
+    uint public constant feeFactorMaxMantissa = 1e18;
 
     struct PoolInfo {
         address creator;
@@ -83,6 +83,10 @@ contract MomaFactory is MomaFactoryInterface {
     /*** view Functions ***/
     function allPoolsLength() external view returns (uint) {
         return allPools.length;
+    }
+
+    function getMomaFeeAdmin(address pool) external view returns (address) {
+        return pools[pool].poolFeeAdmin;
     }
 
     function getMomaFeeReceiver(address pool) external view returns (address payable) {
