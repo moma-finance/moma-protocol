@@ -3,7 +3,6 @@ pragma solidity ^0.5.16;
 interface MomaFactoryInterface {
 
     event PoolCreated(address pool, address creator, uint poolLength);
-    event NewAdmin(address oldAdmin, address newAdmin);
     event NewFarmingDelegate(address oldDelegate, address newDelegate);
     event NewFeeAdmin(address oldFeeAdmin, address newFeeAdmin);
     event NewDefualtFeeReceiver(address oldFeeReceiver, address newFeeReceiver);
@@ -44,8 +43,6 @@ interface MomaFactoryInterface {
     function getMomaFeeAdmin(address pool) external view returns (address);
     function getMomaFeeReceiver(address pool) external view returns (address payable);
     function getMomaFeeFactorMantissa(address pool, address underlying) external view returns (uint);
-
-    function setAdmin(address _newAdmin) external;
     
     function setFeeAdmin(address _newFeeAdmin) external;
     function setDefualtFeeReceiver(address payable _newFeeReceiver) external;

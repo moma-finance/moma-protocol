@@ -1,68 +1,12 @@
 pragma solidity ^0.5.16;
 
-import "./MToken.sol";
 import "./MomaMaster.sol";
 import "./MomaPool.sol";
 import "./MomaFactoryInterface.sol";
-import "./FarmingDelegate.sol";
-import "./Governance/Moma.sol";
-import "./SafeMath.sol";
+import "./MomaFactoryProxy.sol";
 
 
-contract MomaFactory is MomaFactoryInterface {
-    using SafeMath for uint;
-
-    Moma public moma;
-    FarmingDelegate public farmingDelegate;
-    address public admin;
-    address public feeAdmin;
-    address payable public defualtFeeReceiver;
-    uint public defualtFeeFactorMantissa;
-    uint public constant feeFactorMaxMantissa = 1e18;
-
-    struct PoolInfo {
-        address creator;
-        address poolFeeAdmin;
-        address payable poolFeeReceiver;
-        uint feeFactor;
-        bool noFee;
-
-        // MOMA farming
-        /// @notice The block number start to farm MOMA, used for rewards calculation
-        uint startBlock;
-
-        /// @notice The block number to stop farming, used for rewards calculation
-        uint endBlock;
-
-        /// @notice The portion of MOMA speed that each market currently receives
-        mapping(address => uint) momaSpeeds;
-
-        /// @notice The last MOMA claimable calculation block of each moma market of this pool
-        mapping(address => uint) lastBlocks;
-
-        /// @notice The MOMA claimable of each moma market of this pool
-        mapping(address => uint) momaClaimable;
-
-        /// @notice The MOMA claimed of each moma market of this pool
-        mapping(address => uint) momaClaimed;
-
-        /// @notice The MOMA support market of this pool
-        mapping(address => bool) isMomaMarket;
-
-        /// @notice A list of all markets
-        MToken[] allMarkets;
-    }
-
-    mapping(address => uint) public tokenFeeFactors;
-    mapping(address => PoolInfo) public pools;
-    address[] public allPools;
-
-    constructor(address payable _feeReceiver) public {
-        // Set admin to caller
-        admin = msg.sender;
-        feeAdmin = msg.sender;
-        defualtFeeReceiver = _feeReceiver;
-    }
+contract MomaFactory is MomaFactoryInterface, MomaFactoryStorage {
 
     function createPool() external returns (address pool) {
         bytes memory bytecode = type(MomaPool).creationCode;
@@ -124,14 +68,12 @@ contract MomaFactory is MomaFactoryInterface {
     }
 
     /*** admin Functions ***/
-    function setAdmin(address _newAdmin) external {
-        require(msg.sender == admin && _newAdmin != address(0), 'MomaFactory: admin check');
-        address oldAdmin = admin;
-        admin = _newAdmin;
-        emit NewAdmin(oldAdmin, _newAdmin);
+    function _become(MomaFactoryProxy proxy) public {
+        require(msg.sender == proxy.admin(), "only momaFactory admin can change brains");
+        require(proxy._acceptImplementation() == 0, "change not authorized");
     }
 
-    function setFarmingDelegate(FarmingDelegate _delegate) external {
+    function _setFarmingDelegate(FarmingDelegate _delegate) external {
         require(msg.sender == admin, 'MomaFactory: admin check');
         address oldDelegate = address(farmingDelegate);
         farmingDelegate = _delegate;
