@@ -26,6 +26,8 @@ contract MomaFactoryStorage is MomaFactoryProxyStorage {
 
     uint public defualtFeeFactorMantissa;
     uint public constant feeFactorMaxMantissa = 1e18;
+    uint public lendingPoolNum;
+    bool public allowUpgrade = true;
 
     struct PoolInfo {
         address creator;
@@ -33,6 +35,8 @@ contract MomaFactoryStorage is MomaFactoryProxyStorage {
         address payable poolFeeReceiver;
         uint feeFactor;
         bool noFee;
+        bool isLending;
+        bool allowUpgrade;
 
         // MOMA farming
         /// @notice The block number start to farm MOMA, used for rewards calculation

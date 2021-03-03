@@ -339,6 +339,7 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
      * @return 0 if the borrow is allowed, otherwise a semi-opaque error code (See ErrorReporter.sol)
      */
     function borrowAllowed(address mToken, address borrower, uint borrowAmount) external returns (uint) {
+        require(isLendingPool(), "this is not lending pool");
         // Pausing is a very serious situation - we revert to sound the alarms
         require(!borrowGuardianPaused[mToken], "borrow is paused");
 
@@ -1443,6 +1444,14 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
 
     function getBlockNumber() public view returns (uint) {
         return block.number;
+    }
+
+    /**
+     * @notice Wether this pool is lending pool in factory
+     * @return true or false
+     */
+    function isLendingPool() public view returns (bool) {
+        return MomaFactoryInterface(factory).isLendingPool(address(this));
     }
 
     /**

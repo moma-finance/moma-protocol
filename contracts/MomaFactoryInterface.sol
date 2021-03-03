@@ -8,6 +8,7 @@ interface MomaFactoryInterface {
     event NewDefualtFeeReceiver(address oldFeeReceiver, address newFeeReceiver);
     event NewDefualtFeeFactor(uint oldFeeFactor, uint newFeeFactor);
     event NewTokenFeeFactor(address token, uint oldFeeFactor, uint newFeeFactor);
+    event NewLendingPool(address pool);
     event NewPoolFeeAdmin(address pool, address oldPoolFeeAdmin, address newPoolFeeAdmin);
     event NewPoolFeeReceiver(address pool, address oldPoolFeeAdmin, address newPoolFeeAdmin);
     event NewPoolFeeFactor(address pool, uint oldPoolFeeFactor, uint newPoolFeeFactor);
@@ -43,6 +44,7 @@ interface MomaFactoryInterface {
     function getMomaFeeAdmin(address pool) external view returns (address);
     function getMomaFeeReceiver(address pool) external view returns (address payable);
     function getMomaFeeFactorMantissa(address pool, address underlying) external view returns (uint);
+    function isLendingPool(address pool) external view returns (bool);
     
     function setFeeAdmin(address _newFeeAdmin) external;
     function setDefualtFeeReceiver(address payable _newFeeReceiver) external;

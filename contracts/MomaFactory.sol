@@ -47,6 +47,10 @@ contract MomaFactory is MomaFactoryInterface, MomaFactoryStorage {
         }
     }
 
+    function isLendingPool(address pool) external view returns (bool) {
+        return pools[pool].isLending;
+    }
+
     function getMomaMarketSpeed(address pool, address market) external view returns (uint) {
         return pools[pool].momaSpeeds[market];
     }
@@ -67,6 +71,18 @@ contract MomaFactory is MomaFactoryInterface, MomaFactoryStorage {
         return pools[pool].isMomaMarket[market];
     }
 
+    /*** Policy Hooks ***/
+    function upgradeLendingPool(address pool) external {
+        PoolInfo storage info = pools[pool];
+        require(msg.sender == MomaMaster(pool).admin(), 'MomaFactory: only pool admin can upgrade this pool');
+        require(info.creator != address(0), 'MomaFactory: pool not created');
+        require(info.isLending == false, 'MomaFactory: can only upgrade once');
+        require(allowUpgrade == true || info.allowUpgrade == true , 'MomaFactory: upgrade not allowed');
+        info.isLending = true;
+        lendingPoolNum += 1;
+        emit NewLendingPool(pool);
+    }
+
     /*** admin Functions ***/
     function _become(MomaFactoryProxy proxy) public {
         require(msg.sender == proxy.admin(), "only momaFactory admin can change brains");
@@ -78,6 +94,18 @@ contract MomaFactory is MomaFactoryInterface, MomaFactoryStorage {
         address oldDelegate = address(farmingDelegate);
         farmingDelegate = _delegate;
         emit NewFarmingDelegate(oldDelegate, address(_delegate));
+    }
+
+    function _setAllowUpgrade(bool allow) external {
+        require(msg.sender == admin, 'MomaFactory: admin check');
+        allowUpgrade = allow;
+    }
+
+    function _allowUpgradePool(address pool) external {
+        require(msg.sender == admin, 'MomaFactory: admin check');
+        PoolInfo storage info = pools[pool];
+        require(info.creator != address(0), 'MomaFactory: pool not created');
+        info.allowUpgrade = true;
     }
 
     /*** feeAdmin Functions ***/
