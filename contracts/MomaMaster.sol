@@ -425,6 +425,7 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
         payer;
         borrower;
         repayAmount;
+        require(isLendingPool(), "this is not lending pool");
 
         if (!markets[mToken].isListed) {
             return uint(Error.MARKET_NOT_LISTED);
@@ -1270,7 +1271,7 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
      * @param mToken The market whose supply index to update
      */
     function updateMomaSupplyIndex(address mToken) internal {
-        delegateToFarming(abi.encodeWithSignature("updateMomaSupplyIndex(address)", mToken));
+        IMomaFarming(currentMomaFarming()).updateMarketSupplyState(mToken);
     }
 
     /**
@@ -1279,7 +1280,7 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
      * @param marketBorrowIndex The market borrow index
      */
     function updateMomaBorrowIndex(address mToken, uint marketBorrowIndex) internal {
-        delegateToFarming(abi.encodeWithSignature("updateMomaBorrowIndex(address,uint256)", mToken, marketBorrowIndex));
+        IMomaFarming(currentMomaFarming()).updateMarketBorrowState(mToken, marketBorrowIndex);
     }
 
     /**
@@ -1288,7 +1289,7 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
      * @param supplier The address of the supplier to distribute MOMA to
      */
     function distributeSupplierMoma(address mToken, address supplier) internal {
-        delegateToFarming(abi.encodeWithSignature("distributeSupplierMoma(address,address)", mToken, supplier));
+        IMomaFarming(currentMomaFarming()).distributeSupplierMoma(mToken, supplier);
     }
 
     /**
@@ -1299,92 +1300,7 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
      * @param marketBorrowIndex The market borrow index
      */
     function distributeBorrowerMoma(address mToken, address borrower, uint marketBorrowIndex) internal {
-        delegateToFarming(abi.encodeWithSignature("distributeBorrowerMoma(address,address,uint256)", mToken, borrower, marketBorrowIndex));
-    }
-
-    /**
-     * @notice Claim all the MOMA accrued by holder in all markets
-     * @param holder The address to claim MOMA for
-     */
-    function claimMoma(address holder) public {
-        return claimMoma(holder, allMarkets);
-    }
-
-    /**
-     * @notice Claim all the MOMA accrued by holder in the specified markets
-     * @param holder The address to claim MOMA for
-     * @param mTokens The list of markets to claim MOMA in
-     */
-    function claimMoma(address holder, MToken[] memory mTokens) public {
-        address[] memory holders = new address[](1);
-        holders[0] = holder;
-        claimMoma(holders, mTokens, true, true);
-    }
-
-    /**
-     * @notice Claim all MOMA accrued by the holders
-     * @param holders The addresses to claim MOMA for
-     * @param mTokens The list of markets to claim MOMA in
-     * @param borrowers Whether or not to claim MOMA earned by borrowing
-     * @param suppliers Whether or not to claim MOMA earned by supplying
-     */
-    function claimMoma(address[] memory holders, MToken[] memory mTokens, bool borrowers, bool suppliers) public {
-        delegateToFarming(abi.encodeWithSignature("claimMoma(address[],address[],bool,bool)", holders, mTokens, borrowers, suppliers));
-    }
-
-    /**
-     * @notice Calculate all the MOMA accrued by holder in all markets
-     * @param holder The address to claim MOMA for
-     */
-    function momaClaimable(address holder) public view returns (uint) {
-        return momaClaimable(holder, allMarkets, true, true);
-    }
-
-    /**
-     * @notice Calculate MOMA accrued by the holder
-     * @param holder The address to claim MOMA for
-     * @param mTokens The list of markets to claim MOMA in
-     * @param borrowers Whether or not to claim MOMA earned by borrowing
-     * @param suppliers Whether or not to claim MOMA earned by supplying
-     * @return The amount of MOMA the user can claim
-     */
-    function momaClaimable(address holder, MToken[] memory mTokens, bool borrowers, bool suppliers) public view returns (uint) {
-        bytes memory data = delegateToFarmingView(abi.encodeWithSignature("momaClaimable(address,address[],bool,bool)", holder, mTokens, borrowers, suppliers));
-        return abi.decode(data, (uint));
-    }
-
-
-    /*** MOMA Distribution Admin ***/
-
-    /**
-      * @notice Support MOMA farm
-      * @dev Factory function to update MOMA farm
-      * @param start Block heiht to start to farm MOMA
-      * @param end Block heiht to stop farming
-      * @param reset Weather reset MOMA farm state, afther reset user will lose undistributed MOMA, should after last endBlock
-      * @return uint 0=success, otherwise a failure
-      */
-    function _setMomaFarming(uint start, uint end, bool reset) external returns (uint) {
-        // Check caller is factory
-    	require(msg.sender == address(factory), "only factory can support MOMA farming");
-
-        bytes memory data = delegateToFarming(abi.encodeWithSignature("_setMomaFarming(uint256,uint256,bool)", start, end, reset));
-        return abi.decode(data, (uint));
-    }
-
-    /**
-     * @notice Set MOMA speed for a single market
-     * @dev Factory function to set MOMA farm speed
-     * @param mToken The market whose MOMA speed to update
-     * @param momaSpeed New MOMA speed for market
-     * @return uint 0=success, otherwise a failure
-     */
-    function _setMomaSpeed(MToken mToken, uint momaSpeed) external returns (uint) {
-        // Check caller is factory
-        require(msg.sender == address(factory), "only factory can set moma speed");
-        
-        bytes memory data = delegateToFarming(abi.encodeWithSignature("_setMomaSpeed(address,uint256)", mToken, momaSpeed));
-        return abi.decode(data, (uint));
+        IMomaFarming(currentMomaFarming()).distributeBorrowerMoma(mToken, borrower, marketBorrowIndex);
     }
 
 
@@ -1455,6 +1371,14 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
     }
 
     /**
+     * @notice Get current moma farming contract
+     * @return The contract address
+     */
+    function currentMomaFarming() public view returns (address) {
+        return MomaFactoryInterface(factory).momaFarming();
+    }
+
+    /**
      * @notice Get current farming contract
      * @return The contract address
      */
@@ -1495,4 +1419,13 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
         }
         return abi.decode(returnData, (bytes));
     }
+}
+
+
+interface IMomaFarming {
+    function updateMarketSupplyState(address mToken) external;
+    function updateMarketBorrowState(address mToken, uint marketBorrowIndex) external;
+    function distributeSupplierMoma(address mToken, address supplier) external;
+    function distributeBorrowerMoma(address mToken, address borrower, uint marketBorrowIndex) external;
+    function upgradeLendingPool(address pool) external;
 }

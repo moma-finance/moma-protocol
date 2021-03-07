@@ -98,7 +98,7 @@ contract MomaMasterV1Storage is MomaPoolAdminStorage {
     mapping(address => bool) public borrowGuardianPaused;
 
 
-    struct MomaMarketState {
+    struct MarketState {
         /// @notice The market's last updated BorrowIndex or SupplyIndex
         uint224 index;
 
@@ -108,25 +108,6 @@ contract MomaMasterV1Storage is MomaPoolAdminStorage {
 
     /// @notice A list of all markets
     MToken[] public allMarkets;
-
-    /// @notice The portion of momaRate that each market currently receives
-    mapping(address => uint) public momaSpeeds;
-
-    /// @notice The MOMA market supply state for each market
-    mapping(address => MomaMarketState) public momaSupplyState;
-
-    /// @notice The MOMA market borrow state for each market
-    mapping(address => MomaMarketState) public momaBorrowState;
-
-    /// @notice The MOMA borrow index for each market for each supplier as of the last time they accrued MOMA
-    mapping(address => mapping(address => uint)) public momaSupplierIndex;
-
-    /// @notice The MOMA borrow index for each market for each borrower as of the last time they accrued MOMA
-    mapping(address => mapping(address => uint)) public momaBorrowerIndex;
-
-    /// @notice The MOMA accrued but not yet transferred to each user
-    mapping(address => uint) public momaAccrued;
-
 
 
     // @notice The borrowCapGuardian can set borrowCaps to any number for any market. Lowering the borrow cap could disable borrowing on the given market.
@@ -148,10 +129,10 @@ contract MomaMasterV1Storage is MomaPoolAdminStorage {
         mapping(address => uint) speeds;
 
         /// @notice The token market supply state for each market
-        mapping(address => MomaMarketState) supplyState;
+        mapping(address => MarketState) supplyState;
 
         /// @notice The token market borrow state for each market
-        mapping(address => MomaMarketState) borrowState;
+        mapping(address => MarketState) borrowState;
 
         /// @notice The token borrow index for each market for each supplier as of the last time they accrued token
         mapping(address => mapping(address => uint)) supplierIndex;
@@ -169,7 +150,4 @@ contract MomaMasterV1Storage is MomaPoolAdminStorage {
     /// @notice A list of all tokens
     address[] public allTokens;
 
-    uint32 public momaStartBlock;
-    uint32 public momaEndBlock;
-    
 }
