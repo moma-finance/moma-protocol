@@ -1,8 +1,8 @@
 pragma solidity ^0.5.16;
 
-contract MomaMasterInterface {
+interface MomaMasterInterface {
     /// @notice Indicator that this is a MomaMaster contract (for inspection)
-    bool public constant isMomaMaster = true;
+    function isMomaMaster() external view returns (bool);
 
     function factory() external view returns (address);
 

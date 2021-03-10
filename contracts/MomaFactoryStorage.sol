@@ -5,7 +5,7 @@ contract MomaFactoryProxyStorage {
 
     uint public constant feeFactorMaxMantissa = 1e18;
     bool public constant isMomaFactory = true;
-    bool public allowUpgrade = true;
+    bool public allowUpgrade;
 
     address public admin;
     address public pendingAdmin;

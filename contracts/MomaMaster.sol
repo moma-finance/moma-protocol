@@ -42,38 +42,35 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
     /// @notice Emitted when an action is paused on a market
     event ActionPaused(MToken mToken, string action, bool pauseState);
 
-    /// @notice Emitted when a new token speed is updated for a market
-    event TokenSpeedUpdated(address indexed token, MToken indexed mToken, uint newSpeed);
-
-    /// @notice Emitted when a new MOMA speed is updated for a market
-    event MomaSpeedUpdated(MToken indexed mToken, uint newSpeed);
-
-    /// @notice Emitted when token is distributed to a supplier
-    event DistributedSupplierToken(address indexed token, MToken indexed mToken, address indexed supplier, uint tokenDelta, uint tokenSupplyIndex);
-
-    /// @notice Emitted when MOMA is distributed to a supplier
-    event DistributedSupplierMoma(MToken indexed mToken, address indexed supplier, uint momaDelta, uint momaSupplyIndex);
-
-    /// @notice Emitted when token is distributed to a borrower
-    event DistributedBorrowerToken(address indexed token, MToken indexed mToken, address indexed borrower, uint tokenDelta, uint tokenBorrowIndex);
-
-    /// @notice Emitted when MOMA is distributed to a borrower
-    event DistributedBorrowerMoma(MToken indexed mToken, address indexed borrower, uint momaDelta, uint momaBorrowIndex);
-
     /// @notice Emitted when borrow cap for a mToken is changed
     event NewBorrowCap(MToken indexed mToken, uint newBorrowCap);
 
     /// @notice Emitted when borrow cap guardian is changed
     event NewBorrowCapGuardian(address oldBorrowCapGuardian, address newBorrowCapGuardian);
 
+    /// @notice Emitted when a new token speed is updated for a market
+    event TokenSpeedUpdated(address indexed token, MToken indexed mToken, uint oldSpeed, uint newSpeed);
+
+    /// @notice Emitted when token is distributed to a supplier
+    event DistributedSupplierToken(address indexed token, MToken indexed mToken, address indexed supplier, uint tokenDelta, uint tokenSupplyIndex);
+
+    /// @notice Emitted when token is distributed to a borrower
+    event DistributedBorrowerToken(address indexed token, MToken indexed mToken, address indexed borrower, uint tokenDelta, uint tokenBorrowIndex);
+
+    /// @notice Emitted when token is claimed by user
+    event TokenClaimed(address indexed token, address indexed user, uint accrued, uint claimed, uint notClaimed);
+
+    /// @notice Emitted when farm token is added by admin
+    event AddFarmToken(EIP20Interface token, uint start);
+
+    /// @notice Emitted when a new token market is added to momaMarkets
+    event NewTokenMarket(address indexed token, MToken indexed mToken);
+
     /// @notice Emitted when token is granted by admin
     event TokenGranted(address token, address recipient, uint amount);
 
-    /// @notice Emitted when farm token is updated by admin
-    event FarmTokenUpdated(EIP20Interface token, uint oldStart, uint oldEnd, uint newStart, uint newEnd);
-
-    /// @notice Emitted when farm MOMA is updated by factory
-    event FarmMomaUpdated(uint oldStart, uint oldEnd, uint newStart, uint newEnd, bool reset);
+    /// @notice Indicator that this is a MomaMaster contract (for inspection)
+    bool public constant isMomaMaster = true;
 
     /// @notice The initial moma index for a market
     uint224 public constant momaInitialIndex = 1e36;
@@ -339,7 +336,7 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
      * @return 0 if the borrow is allowed, otherwise a semi-opaque error code (See ErrorReporter.sol)
      */
     function borrowAllowed(address mToken, address borrower, uint borrowAmount) external returns (uint) {
-        require(isLendingPool(), "this is not lending pool");
+        require(isLendingPool == true, "this is not lending pool");
         // Pausing is a very serious situation - we revert to sound the alarms
         require(!borrowGuardianPaused[mToken], "borrow is paused");
 
@@ -425,7 +422,7 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
         payer;
         borrower;
         repayAmount;
-        require(isLendingPool(), "this is not lending pool");
+        require(isLendingPool == true, "this is not lending pool");
 
         if (!markets[mToken].isListed) {
             return uint(Error.MARKET_NOT_LISTED);
@@ -1015,6 +1012,17 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
         return uint(Error.NO_ERROR);
     }
 
+    function _upgradeLendingPool() public returns (bool) {
+        require(msg.sender == admin, "only admin can upgrade");
+
+        bool state = MomaFactoryInterface(factory).upgradeLendingPool();
+        if (state == true) {
+            require(updateBorrowBlock() == 0, "update borrow block error");
+            isLendingPool = true;
+        }
+        return state;
+    }
+
     function _setMintPaused(MToken mToken, bool state) public returns (bool) {
         require(markets[address(mToken)].isListed, "cannot pause a market that is not listed");
         require(msg.sender == pauseGuardian || msg.sender == admin, "only pause guardian and admin can pause");
@@ -1067,6 +1075,27 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
 
 
     /*** Farming ***/
+
+    /**
+      * @notice Update all markets' borrow block for all tokens when pool upgrade to lending pool
+      * @return uint 0=success, otherwise a failure
+      */
+    function updateBorrowBlock() internal returns (uint) {
+        uint32 blockNumber = safe32(getBlockNumber(), "block number exceeds 32 bits");
+        for (uint i = 0; i < allTokens.length; i++) {
+            address token = allTokens[i];
+            uint32 nextBlock = blockNumber;
+            TokenFarmState storage state = farmStates[token];
+            if (state.startBlock > blockNumber) nextBlock = state.startBlock;
+
+            MToken[] memory mTokens = state.tokenMarkets;
+            for (uint j = 0; j < mTokens.length; j++) {
+                MToken mToken = mTokens[j];
+                state.borrowState[address(mToken)].block = nextBlock;  // if state.speeds[address(mToken)] > 0 ?
+            }
+        }
+        return uint(Error.NO_ERROR);
+    }
 
     /**
      * @notice Accrue tokens and MOMA to the market by updating the supply index
@@ -1164,57 +1193,89 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
         delegateToFarming(abi.encodeWithSignature("distributeBorrowerToken(address,address,address,uint256)", token, mToken, borrower, marketBorrowIndex));
     }
 
+
+    /*** Reward Public Functions ***/
+
     /**
-     * @notice Claim all the tokens accrued by holder in all markets
-     * @param holder The address to claim tokens for
+     * @notice Distribute all the token accrued to user in specified markets of specified token and claim
+     * @param token The token to distribute
+     * @param mTokens The list of markets to distribute token in
+     * @param suppliers Whether or not to distribute token earned by supplying
+     * @param borrowers Whether or not to distribute token earned by borrowing
      */
-    function claimToken(address holder) public {
-        return claimToken(holder, allMarkets, allTokens);
+    function dclaim(address token, MToken[] memory mTokens, bool suppliers, bool borrowers) public {
+        delegateToFarming(abi.encodeWithSignature("dclaim(address,address[],bool,bool)", token, mTokens, suppliers, borrowers));
     }
 
     /**
-     * @notice Claim all the tokens accrued by holder in the specified markets
-     * @param holder The address to claim tokens for
-     * @param mTokens The list of markets to claim tokens in
-     * @param tokens The list of tokens to claim
+     * @notice Distribute all the token accrued to user in all markets of specified token and claim
+     * @param token The token to distribute
+     * @param suppliers Whether or not to distribute token earned by supplying
+     * @param borrowers Whether or not to distribute token earned by borrowing
      */
-    function claimToken(address holder, MToken[] memory mTokens, address[] memory tokens) public {
-        address[] memory holders = new address[](1);
-        holders[0] = holder;
-        claimToken(holders, mTokens, tokens, true, true);
+    function dclaim(address token, bool suppliers, bool borrowers) public {
+        delegateToFarming(abi.encodeWithSignature("dclaim(address,bool,bool)", token, suppliers, borrowers));
     }
 
     /**
-     * @notice Claim all the tokens accrued by the holders
-     * @param holders The addresses to claim tokens for
-     * @param mTokens The list of markets to claim tokens in
-     * @param tokens The list of tokens to claim
-     * @param borrowers Whether or not to claim tokens earned by borrowing
-     * @param suppliers Whether or not to claim tokens earned by supplying
+     * @notice Distribute all the token accrued to user in all markets of specified tokens and claim
+     * @param tokens The list of tokens to distribute and claim
+     * @param suppliers Whether or not to distribute token earned by supplying
+     * @param borrowers Whether or not to distribute token earned by borrowing
      */
-    function claimToken(address[] memory holders, MToken[] memory mTokens, address[] memory tokens, bool borrowers, bool suppliers) public {
-        delegateToFarming(abi.encodeWithSignature("claimToken(address[],address[],address[],bool,bool)", holders, mTokens, tokens, borrowers, suppliers));
+    function dclaim(address[] memory tokens, bool suppliers, bool borrowers) public {
+        delegateToFarming(abi.encodeWithSignature("dclaim(address[],bool,bool)", tokens, suppliers, borrowers));
     }
 
     /**
-     * @notice Calculate all the tokens accrued by holder in all markets
-     * @param holder The address to claim tokens for
+     * @notice Distribute all the token accrued to user in all markets of all tokens and claim
+     * @param suppliers Whether or not to distribute token earned by supplying
+     * @param borrowers Whether or not to distribute token earned by borrowing
      */
-    function tokenClaimable(address holder) public view returns (uint[] memory) {
-        return tokenClaimable(holder, allMarkets, allTokens, true, true);
+    function dclaim(bool suppliers, bool borrowers) public {
+        delegateToFarming(abi.encodeWithSignature("dclaim(bool,bool)", suppliers, borrowers));
     }
 
     /**
-     * @notice Calculate all the tokens accrued by the holder
-     * @param holder The address to claim tokens for
-     * @param mTokens The list of markets to claim tokens in
-     * @param tokens The list of tokens to claim
-     * @param borrowers Whether or not to claim tokens earned by borrowing
-     * @param suppliers Whether or not to claim tokens earned by supplying
-     * @return The list amount of token the user can claim
+     * @notice Claim all the token have been distributed to user of specified token
+     * @param token The token to claim
      */
-    function tokenClaimable(address holder, MToken[] memory mTokens, address[] memory tokens, bool borrowers, bool suppliers) public view returns (uint[] memory) {
-        bytes memory data = delegateToFarmingView(abi.encodeWithSignature("tokenClaimable(address,address[],address[],bool,bool)", holder, mTokens, tokens, borrowers, suppliers));
+    function claim(address token) public {
+        delegateToFarming(abi.encodeWithSignature("claim(address)", token));
+    }
+
+    /**
+     * @notice Claim all the token have been distributed to user of all tokens
+     */
+    function claim() public {
+        delegateToFarming(abi.encodeWithSignature("claim()"));
+    }
+
+
+    /**
+     * @notice Calculate undistributed token accrued by the user in specified market of specified token
+     * @param user The address to calculate token for
+     * @param token The token to calculate
+     * @param mToken The market to calculate token
+     * @param suppliers Whether or not to calculate token earned by supplying
+     * @param borrowers Whether or not to calculate token earned by borrowing
+     * @return The amount of undistributed token of this user
+     */
+    function undistributed(address user, address token, address mToken, bool suppliers, bool borrowers) public view returns (uint) {
+        bytes memory data = delegateToFarmingView(abi.encodeWithSignature("undistributed(address,address,address,bool,bool)", user, token, mToken, suppliers, borrowers));
+        return abi.decode(data, (uint));
+    }
+
+    /**
+     * @notice Calculate undistributed tokens accrued by the user in all markets of specified token
+     * @param user The address to calculate token for
+     * @param token The token to calculate
+     * @param suppliers Whether or not to calculate token earned by supplying
+     * @param borrowers Whether or not to calculate token earned by borrowing
+     * @return The amount of undistributed token of this user in each market
+     */
+    function undistributed(address user, address token, bool suppliers, bool borrowers) public view returns (uint[] memory) {
+        bytes memory data = delegateToFarmingView(abi.encodeWithSignature("undistributed(address,address,bool,bool)", user, token, suppliers, borrowers));
         return abi.decode(data, (uint[]));
     }
 
@@ -1229,39 +1290,31 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
      * @param amount The amount of token to (possibly) transfer
      */
     function _grantToken(address token, address recipient, uint amount) public {
-        require(adminOrInitializing(), "only admin can grant token");
-
         delegateToFarming(abi.encodeWithSignature("_grantToken(address,address,uint256)", token, recipient, amount));
     }
 
     /**
-      * @notice Add/Update erc20 token to farm
-      * @dev Admin function to update token farm
+      * @notice Add erc20 token to farm
+      * @dev Admin function to add farm token, can only call once
       * @param token Token to update for farming
       * @param start Block heiht to start to farm this token
-      * @param end Block heiht to stop farming
-      * @param reset Weather reset token state, afther reset user will lose undistributed token, should after endBlock
       * @return uint 0=success, otherwise a failure
       */
-    function _setTokenFarming(EIP20Interface token, uint start, uint end, bool reset) external returns (uint) {
-    	require(adminOrInitializing(), "only admin can update farm token");
-
-        bytes memory data = delegateToFarming(abi.encodeWithSignature("_setTokenFarming(address,uint256,uint256,bool)", token, start, end, reset));
+    function _addFarmToken(EIP20Interface token, uint start) external returns (uint) {
+        bytes memory data = delegateToFarming(abi.encodeWithSignature("_addFarmToken(address,uint256)", token, start));
         return abi.decode(data, (uint));
     }
 
     /**
-     * @notice Set token speed for a single market
+     * @notice Set token speed for multi markets
+     * @dev Note that token speed could be set to 0 to halt liquidity rewards for a market
      * @param token The token to update speed
-     * @param mToken The market whose token speed to update
-     * @param newSpeed New token speed for market
+     * @param mTokens The markets whose token speed to update
+     * @param newSpeeds New token speeds for markets
      */
-    function _setTokenSpeed(address token, MToken mToken, uint newSpeed) public {
-        require(adminOrInitializing(), "only admin can set token speed");
-
-        delegateToFarming(abi.encodeWithSignature("_setTokenSpeed(address,address,uint256)", token, mToken, newSpeed));
+    function _setTokensSpeed(address token, MToken[] memory mTokens, uint[] memory newSpeeds) public {
+        delegateToFarming(abi.encodeWithSignature("_setTokensSpeed(address,address[],uint256[])", token, mTokens, newSpeeds));
     }
-
 
 
     /*** MOMA Farming ***/
@@ -1306,8 +1359,6 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
 
     /*** View functions ***/
 
-    /*** Tokens Farming ***/
-
     /**
      * @notice Return all of the support tokens
      * @dev The automatic getter may be used to access an individual token.
@@ -1326,7 +1377,7 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
     function isFarming(address token, address market) public view returns (bool) {
         uint blockNumber = getBlockNumber();
         TokenFarmState storage state = farmStates[token];
-        return state.speeds[market] > 0 && blockNumber > uint(state.startBlock) && blockNumber <= uint(state.endBlock);
+        return state.speeds[market] > 0 && blockNumber > uint(state.startBlock);
     }
 
     /**
@@ -1350,6 +1401,25 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
     }
 
     /**
+     * @notice Weather a market is this token market
+     * @param token The token address to ask for
+     * @param market The market address to ask for
+     * @return true of false
+     */
+    function isTokenMarket(address token, address market) external view returns (bool) {
+        return farmStates[token].isTokenMarket[market];
+    }
+
+    /**
+     * @notice Return all the farming support markets of a token
+     * @param token The token address to ask for
+     * @return The list of market addresses
+     */
+    function getTokenMarkets(address token) public view returns (MToken[] memory) {
+        return farmStates[token].tokenMarkets;
+    }
+
+    /**
      * @notice Return all of the markets
      * @dev The automatic getter may be used to access an individual market.
      * @return The list of market addresses
@@ -1362,13 +1432,8 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
         return block.number;
     }
 
-    /**
-     * @notice Wether this pool is lending pool in factory
-     * @return true or false
-     */
-    function isLendingPool() public view returns (bool) {
-        return MomaFactoryInterface(factory).isLendingPool(address(this));
-    }
+
+    /*** Delegate ***/
 
     /**
      * @notice Get current moma farming contract
@@ -1404,6 +1469,18 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
     }
 
     /**
+     * @notice Public method to delegate view execution to farming contract
+     * @dev It returns to the external caller whatever the implementation returns or forwards reverts
+     * @param data The raw data to delegatecall
+     * @return The returned bytes from the delegatecall
+     */
+    function delegateToFarmingSelf(bytes memory data) public returns (bytes memory) {
+        require(msg.sender == address(this), "can only called by self");
+
+        return delegateToFarming(data);
+    }
+
+    /**
      * @notice Internal method to delegate view execution to farming contract
      * @dev It returns to the external caller whatever the implementation returns or forwards reverts
      *  There are an additional 2 prefix uints from the wrapper returndata, which we ignore since we make an extra hop.
@@ -1411,7 +1488,7 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
      * @return The returned bytes from the delegatecall
      */
     function delegateToFarmingView(bytes memory data) internal view returns (bytes memory) {
-        (bool success, bytes memory returnData) = address(this).staticcall(abi.encodeWithSignature("delegateToFarming(bytes)", data));
+        (bool success, bytes memory returnData) = address(this).staticcall(abi.encodeWithSignature("delegateToFarmingSelf(bytes)", data));
         assembly {
             if eq(success, 0) {
                 revert(add(returnData, 0x20), returndatasize)

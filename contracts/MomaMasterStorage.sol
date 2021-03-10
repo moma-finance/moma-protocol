@@ -54,6 +54,11 @@ contract MomaMasterV1Storage is MomaPoolAdminStorage {
     uint public maxAssets;
 
     /**
+     * @notice Weather is lending pool
+     */
+    bool public isLendingPool;
+
+    /**
      * @notice Per-account mapping of "assets you are in", capped by maxAssets
      */
     mapping(address => MToken[]) public accountAssets;
@@ -122,9 +127,6 @@ contract MomaMasterV1Storage is MomaPoolAdminStorage {
         /// @notice The block number to start to farm this token
         uint32 startBlock;
 
-        /// @notice The block number to stop farming
-        uint32 endBlock;
-
         /// @notice The portion of tokenRate that each market currently receives
         mapping(address => uint) speeds;
 
@@ -142,6 +144,12 @@ contract MomaMasterV1Storage is MomaPoolAdminStorage {
 
         /// @notice The token accrued but not yet transferred to each user
         mapping(address => uint) accrued;
+
+        /// @notice Whether is token market, used to avoid add to tokenMarkets again
+        mapping(address => bool) isTokenMarket;
+
+        /// @notice A list of token markets of this token, it's speed may be 0, but startBlock will always > 0
+        MToken[] tokenMarkets;
     }
 
     /// @notice The token farm states

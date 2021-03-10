@@ -35,6 +35,7 @@ interface MomaFactoryInterface {
     function getMomaFeeFactorMantissa(address pool, address underlying) external view returns (uint);
     function isMomaPool(address pool) external view returns (bool);
     function isLendingPool(address pool) external view returns (bool);
+    function upgradeLendingPool() external returns (bool);
     
     function setFeeAdmin(address _newFeeAdmin) external;
     function setDefualtFeeReceiver(address payable _newFeeReceiver) external;

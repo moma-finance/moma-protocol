@@ -56,18 +56,20 @@ contract MomaFactory is MomaFactoryInterface, MomaFactoryStorage {
     }
 
 
-    /*** Policy Hooks ***/
-    function upgradeLendingPool(address pool) external {
-        PoolInfo storage info = pools[pool];
-        require(msg.sender == MomaMaster(pool).admin(), 'MomaFactory: only pool admin can upgrade this pool');
+    /*** pool Functions ***/
+    function upgradeLendingPool() external returns (bool) {
+        // pool must be msg.sender, only pool can call this function
+        PoolInfo storage info = pools[msg.sender];
         require(info.creator != address(0), 'MomaFactory: pool not created');
         require(info.isLending == false, 'MomaFactory: can only upgrade once');
-        require(allowUpgrade == true || info.allowUpgrade == true , 'MomaFactory: upgrade not allowed');
+        require(info.allowUpgrade == true || allowUpgrade == true, 'MomaFactory: upgrade not allowed');
 
-        IMomaFarming(momaFarming).upgradeLendingPool(pool);
+        IMomaFarming(momaFarming).upgradeLendingPool(msg.sender);
         info.isLending = true;
         lendingPoolNum += 1;
-        emit NewLendingPool(pool);
+        emit NewLendingPool(msg.sender);
+
+        return true;
     }
 
     /*** admin Functions ***/

@@ -12,28 +12,22 @@ import "./MomaFactoryInterface.sol";
 contract FarmingDelegate is MomaMasterV1Storage, MomaMasterErrorReporter, ExponentialNoError {
 
     /// @notice Emitted when a new token speed is updated for a market
-    event TokenSpeedUpdated(address indexed token, MToken indexed mToken, uint newSpeed);
-
-    /// @notice Emitted when a new MOMA speed is updated for a market
-    event MomaSpeedUpdated(MToken indexed mToken, uint newSpeed);
+    event TokenSpeedUpdated(address indexed token, MToken indexed mToken, uint oldSpeed, uint newSpeed);
 
     /// @notice Emitted when token is distributed to a supplier
     event DistributedSupplierToken(address indexed token, MToken indexed mToken, address indexed supplier, uint tokenDelta, uint tokenSupplyIndex);
 
-    /// @notice Emitted when MOMA is distributed to a supplier
-    event DistributedSupplierMoma(MToken indexed mToken, address indexed supplier, uint momaDelta, uint momaSupplyIndex);
-
     /// @notice Emitted when token is distributed to a borrower
     event DistributedBorrowerToken(address indexed token, MToken indexed mToken, address indexed borrower, uint tokenDelta, uint tokenBorrowIndex);
 
-    /// @notice Emitted when MOMA is distributed to a borrower
-    event DistributedBorrowerMoma(MToken indexed mToken, address indexed borrower, uint momaDelta, uint momaBorrowIndex);
+    /// @notice Emitted when token is claimed by user
+    event TokenClaimed(address indexed token, address indexed user, uint accrued, uint claimed, uint notClaimed);
 
-    /// @notice Emitted when farm token is updated by admin
-    event FarmTokenUpdated(EIP20Interface token, uint oldStart, uint oldEnd, uint newStart, uint newEnd);
+    /// @notice Emitted when farm token is added by admin
+    event AddFarmToken(EIP20Interface token, uint start);
 
-    /// @notice Emitted when farm MOMA is updated by factory
-    event FarmMomaUpdated(uint oldStart, uint oldEnd, uint newStart, uint newEnd, bool reset);
+    /// @notice Emitted when a new token market is added to momaMarkets
+    event NewTokenMarket(address indexed token, MToken indexed mToken);
 
     /// @notice Emitted when token is granted by admin
     event TokenGranted(address token, address recipient, uint amount);
@@ -46,92 +40,95 @@ contract FarmingDelegate is MomaMasterV1Storage, MomaMasterErrorReporter, Expone
 
     /**
      * @notice Calculates the new token supply index and block
+     * @dev Non-token market will return (0, blockNumber). To avoid revert: no over/underflow
      * @param token The token whose supply index to calculate
      * @param mToken The market whose supply index to calculate
      * @return (new index, new block)
      */
     function newTokenSupplyIndexInternal(address token, address mToken) internal view returns (uint224, uint32) {
-        uint blockNumber = getBlockNumber();
         MarketState storage supplyState = farmStates[token].supplyState[mToken];
         uint224 _index = supplyState.index;
         uint32 _block = supplyState.block;
-        uint32 endBlock = farmStates[token].endBlock;
-        if (blockNumber > uint(supplyState.block) && blockNumber > uint(farmStates[token].startBlock) && supplyState.block < endBlock) {
+        uint blockNumber = getBlockNumber();
+
+        if (blockNumber > uint(_block) && blockNumber > uint(farmStates[token].startBlock)) {
             uint supplySpeed = farmStates[token].speeds[mToken];
-            uint endNumber = blockNumber;
-            if (blockNumber > uint(endBlock)) endNumber = uint(endBlock);
-            uint deltaBlocks = sub_(endNumber, uint(supplyState.block)); // deltaBlocks will always > 0
-            if (supplySpeed > 0) {
-                uint supplyTokens = MToken(mToken).totalSupply();
-                uint tokenAccrued = mul_(deltaBlocks, supplySpeed);
-                Double memory ratio = supplyTokens > 0 ? fraction(tokenAccrued, supplyTokens) : Double({mantissa: 0});
-                Double memory index = add_(Double({mantissa: supplyState.index}), ratio);
-                _index = safe224(index.mantissa, "new index exceeds 224 bits");
-            }
-            _block = safe32(endNumber, "block number exceeds 32 bits");
+            uint deltaBlocks = sub_(blockNumber, uint(_block)); // deltaBlocks will always > 0
+            uint tokenAccrued = mul_(deltaBlocks, supplySpeed);
+            uint supplyTokens = MToken(mToken).totalSupply();
+            Double memory ratio = supplyTokens > 0 ? fraction(tokenAccrued, supplyTokens) : Double({mantissa: 0});
+            Double memory index = add_(Double({mantissa: _index}), ratio);
+            _index = safe224(index.mantissa, "new index exceeds 224 bits");
+            _block = safe32(blockNumber, "block number exceeds 32 bits");
         }
         return (_index, _block);
     }
 
     /**
      * @notice Accrue token to the market by updating the supply index
+     * @dev To avoid revert: no over/underflow
      * @param token The token whose supply index to update
      * @param mToken The market whose supply index to update
      */
     function updateTokenSupplyIndexInternal(address token, address mToken) internal {
-        (uint224 _index, uint32 _block) = newTokenSupplyIndexInternal(token, mToken);
-        MarketState storage supplyState = farmStates[token].supplyState[mToken];
-        
-        if (supplyState.index != _index) supplyState.index = _index;
-        if (supplyState.block != _block) supplyState.block = _block;
+        // Non-token market's speed will always be 0, 0 speed token market will also update nothing
+        if (farmStates[token].speeds[mToken] > 0) {
+            (uint224 _index, uint32 _block) = newTokenSupplyIndexInternal(token, mToken);
+
+            MarketState storage supplyState = farmStates[token].supplyState[mToken];
+            supplyState.index = _index;
+            supplyState.block = _block;
+        }
     }
 
     /**
      * @notice Calculates the new token borrow index and block
+     * @dev Non-token market will return (0, blockNumber). To avoid revert: marketBorrowIndex > 0
      * @param token The token whose borrow index to calculate
      * @param mToken The market whose borrow index to calculate
      * @param marketBorrowIndex The market borrow index
      * @return (new index, new block)
      */
     function newTokenBorrowIndexInternal(address token, address mToken, uint marketBorrowIndex) internal view returns (uint224, uint32) {
-        uint blockNumber = getBlockNumber();
         MarketState storage borrowState = farmStates[token].borrowState[mToken];
         uint224 _index = borrowState.index;
         uint32 _block = borrowState.block;
-        uint32 endBlock = farmStates[token].endBlock;
-        if (blockNumber > uint(borrowState.block) && blockNumber > uint(farmStates[token].startBlock) && borrowState.block < endBlock) {
+        uint blockNumber = getBlockNumber();
+
+        if (blockNumber > uint(_block) && blockNumber > uint(farmStates[token].startBlock)) {
             uint borrowSpeed = farmStates[token].speeds[mToken];
-            uint endNumber = blockNumber;
-            if (blockNumber > uint(endBlock)) endNumber = uint(endBlock);
-            uint deltaBlocks = sub_(endNumber, uint(borrowState.block)); // deltaBlocks will always > 0
-            if (borrowSpeed > 0) {
-                uint borrowAmount = div_(MToken(mToken).totalBorrows(), Exp({mantissa: marketBorrowIndex}));
-                uint tokenAccrued = mul_(deltaBlocks, borrowSpeed);
-                Double memory ratio = borrowAmount > 0 ? fraction(tokenAccrued, borrowAmount) : Double({mantissa: 0});
-                Double memory index = add_(Double({mantissa: borrowState.index}), ratio);
-                _index = safe224(index.mantissa, "new index exceeds 224 bits");
-            }
-            _block = safe32(endNumber, "block number exceeds 32 bits");
+            uint deltaBlocks = sub_(blockNumber, uint(_block)); // deltaBlocks will always > 0
+            uint tokenAccrued = mul_(deltaBlocks, borrowSpeed);
+            uint borrowAmount = div_(MToken(mToken).totalBorrows(), Exp({mantissa: marketBorrowIndex}));
+            Double memory ratio = borrowAmount > 0 ? fraction(tokenAccrued, borrowAmount) : Double({mantissa: 0});
+            Double memory index = add_(Double({mantissa: _index}), ratio);
+            _index = safe224(index.mantissa, "new index exceeds 224 bits");
+            _block = safe32(blockNumber, "block number exceeds 32 bits");
         }
         return (_index, _block);
     }
 
     /**
      * @notice Accrue token to the market by updating the borrow index
+     * @dev To avoid revert: no over/underflow
      * @param token The token whose borrow index to update
      * @param mToken The market whose borrow index to update
      * @param marketBorrowIndex The market borrow index
      */
     function updateTokenBorrowIndexInternal(address token, address mToken, uint marketBorrowIndex) internal {
-        (uint224 _index, uint32 _block) = newTokenBorrowIndexInternal(token, mToken, marketBorrowIndex);
-        MarketState storage borrowState = farmStates[token].borrowState[mToken];
-
-        if (borrowState.index != _index) borrowState.index = _index;
-        if (borrowState.block != _block) borrowState.block = _block;
+        // Non-token market's speed will always be 0, 0 speed token market will also update nothing
+        if (isLendingPool == true && farmStates[token].speeds[mToken] > 0 && marketBorrowIndex > 0) {
+            (uint224 _index, uint32 _block) = newTokenBorrowIndexInternal(token, mToken, marketBorrowIndex);
+            
+            MarketState storage borrowState = farmStates[token].borrowState[mToken];
+            borrowState.index = _index;
+            borrowState.block = _block;
+        }
     }
 
     /**
      * @notice Calculates token accrued by a supplier
+     * @dev To avoid revert: no over/underflow
      * @param token The token in which the supplier is interacting
      * @param mToken The market in which the supplier is interacting
      * @param supplier The address of the supplier to distribute token to
@@ -144,34 +141,32 @@ contract FarmingDelegate is MomaMasterV1Storage, MomaMasterErrorReporter, Expone
         uint _supplierAccrued = state.accrued[supplier];
         uint supplierDelta = 0;
 
-        if (supplyIndex.mantissa > 0) {
-            if (supplierIndex.mantissa == 0 || supplierIndex.mantissa > supplyIndex.mantissa) {
-                supplierIndex.mantissa = momaInitialIndex;
-            }
+        // supply before set token market can still get rewards start from set block or startBlock
+        if (supplierIndex.mantissa == 0 && supplyIndex.mantissa > 0) {
+            supplierIndex.mantissa = momaInitialIndex;
         }
 
-        if (supplyIndex.mantissa > supplierIndex.mantissa) {
-            Double memory deltaIndex = sub_(supplyIndex, supplierIndex);
-            uint supplierTokens = MToken(mToken).balanceOf(supplier);
-            supplierDelta = mul_(supplierTokens, deltaIndex);
-            _supplierAccrued = add_(state.accrued[supplier], supplierDelta);
-        }
+        Double memory deltaIndex = sub_(supplyIndex, supplierIndex);
+        uint supplierTokens = MToken(mToken).balanceOf(supplier);
+        supplierDelta = mul_(supplierTokens, deltaIndex);
+        _supplierAccrued = add_(_supplierAccrued, supplierDelta);
         return (_supplierAccrued, supplierDelta);
     }
 
     /**
-     * @notice Calculate token accrued by a supplier
+     * @notice Distribute token accrued by a supplier
+     * @dev To avoid revert: no over/underflow
      * @param token The token in which the supplier is interacting
      * @param mToken The market in which the supplier is interacting
      * @param supplier The address of the supplier to distribute token to
      */
     function distributeSupplierTokenInternal(address token, address mToken, address supplier) internal {
         TokenFarmState storage state = farmStates[token];
-        Double memory supplyIndex = Double({mantissa: state.supplyState[mToken].index});
-        (uint _supplierAccrued, uint supplierDelta) = newSupplierTokenInternal(token, mToken, supplier, supplyIndex);
+        if (state.supplyState[mToken].index > state.supplierIndex[mToken][supplier]) {
+            Double memory supplyIndex = Double({mantissa: state.supplyState[mToken].index});
+            (uint _supplierAccrued, uint supplierDelta) = newSupplierTokenInternal(token, mToken, supplier, supplyIndex);
 
-        state.supplierIndex[mToken][supplier] = supplyIndex.mantissa;
-        if (_supplierAccrued > state.accrued[supplier]) {
+            state.supplierIndex[mToken][supplier] = supplyIndex.mantissa;
             state.accrued[supplier] = _supplierAccrued;
             emit DistributedSupplierToken(token, MToken(mToken), supplier, supplierDelta, supplyIndex.mantissa);
         }
@@ -180,6 +175,7 @@ contract FarmingDelegate is MomaMasterV1Storage, MomaMasterErrorReporter, Expone
     /**
      * @notice Calculate token accrued by a borrower
      * @dev Borrowers will not begin to accrue until after the first interaction with the protocol.
+     * @dev To avoid revert: marketBorrowIndex > 0
      * @param mToken The market in which the borrower is interacting
      * @param borrower The address of the borrower to distribute token to
      * @param marketBorrowIndex The market borrow index
@@ -192,34 +188,30 @@ contract FarmingDelegate is MomaMasterV1Storage, MomaMasterErrorReporter, Expone
         uint _borrowerAccrued = state.accrued[borrower];
         uint borrowerDelta = 0;
 
-        // when updated farm token, borrowerIndex should be set to initial
-        if (borrowerIndex.mantissa > borrowIndex.mantissa) {
-            borrowerIndex.mantissa = momaInitialIndex;
-        }
-
-        if (borrowerIndex.mantissa > 0 && borrowIndex.mantissa > borrowerIndex.mantissa) {
+        if (borrowerIndex.mantissa > 0) {
             Double memory deltaIndex = sub_(borrowIndex, borrowerIndex);
             uint borrowerAmount = div_(MToken(mToken).borrowBalanceStored(borrower), Exp({mantissa: marketBorrowIndex}));
             borrowerDelta = mul_(borrowerAmount, deltaIndex);
-            _borrowerAccrued = add_(state.accrued[borrower], borrowerDelta);
+            _borrowerAccrued = add_(_borrowerAccrued, borrowerDelta);
         }
         return (_borrowerAccrued, borrowerDelta);
     }
 
     /**
-     * @notice Calculate token accrued by a borrower
+     * @notice Distribute token accrued by a borrower
      * @dev Borrowers will not begin to accrue until after the first interaction with the protocol.
+     * @dev To avoid revert: no over/underflow
      * @param mToken The market in which the borrower is interacting
      * @param borrower The address of the borrower to distribute token to
      * @param marketBorrowIndex The market borrow index
      */
     function distributeBorrowerTokenInternal(address token, address mToken, address borrower, uint marketBorrowIndex) internal {
         TokenFarmState storage state = farmStates[token];
-        Double memory borrowIndex = Double({mantissa: state.borrowState[mToken].index});
-        (uint _borrowerAccrued, uint borrowerDelta) = newBorrowerTokenInternal(token, mToken, borrower, marketBorrowIndex, borrowIndex);
+        if (isLendingPool == true && state.borrowState[mToken].index > state.borrowerIndex[mToken][borrower] && marketBorrowIndex > 0) {
+            Double memory borrowIndex = Double({mantissa: state.borrowState[mToken].index});
+            (uint _borrowerAccrued, uint borrowerDelta) = newBorrowerTokenInternal(token, mToken, borrower, marketBorrowIndex, borrowIndex);
 
-        state.borrowerIndex[mToken][borrower] = borrowIndex.mantissa;
-        if (_borrowerAccrued > state.accrued[borrower]) {
+            state.borrowerIndex[mToken][borrower] = borrowIndex.mantissa;
             state.accrued[borrower] = _borrowerAccrued;
             emit DistributedBorrowerToken(token, MToken(mToken), borrower, borrowerDelta, borrowIndex.mantissa);
         }
@@ -243,24 +235,41 @@ contract FarmingDelegate is MomaMasterV1Storage, MomaMasterErrorReporter, Expone
         return amount;
     }
 
-    /**
-      * @notice Reset all markets state for a token
-      * @param token The token to reset state
-      */
-    function _resetTokenState(address token) internal {
-        TokenFarmState storage state = farmStates[token];
-        for (uint i = 0; i < allMarkets.length; i++) {
-            address market = address(allMarkets[i]);
-            if (state.speeds[market] > 0) {
-                state.supplyState[market] = MarketState({
-                    index: momaInitialIndex,
-                    block: state.startBlock
-                });
 
-                state.borrowState[market] = MarketState({
-                    index: momaInitialIndex,
-                    block: state.startBlock
-                });
+    /**
+     * @notice Claim all the token have been distributed to user
+     * @param user The address to claim token for
+     * @param token The token address to claim
+     */
+    function claim(address user, address token) internal {
+        uint accrued = farmStates[token].accrued[user];
+        uint notClaimed = grantTokenInternal(token, user, accrued);
+        farmStates[token].accrued[user] = notClaimed;
+        uint claimed = sub_(accrued, notClaimed);
+        emit TokenClaimed(token, user, accrued, claimed, notClaimed);
+    }
+
+    /**
+     * @notice Distribute token accrued to user in the specified markets of specified token
+     * @param user The address to distribute token for
+     * @param token The token address to distribute
+     * @param mTokens The list of markets to distribute token in
+     * @param suppliers Whether or not to distribute token earned by supplying
+     * @param borrowers Whether or not to distribute token earned by borrowing
+     */
+    function distribute(address user, address token, MToken[] memory mTokens, bool suppliers, bool borrowers) internal {
+        for (uint i = 0; i < mTokens.length; i++) {
+            address mToken = address(mTokens[i]);
+            
+            if (suppliers == true) {
+                updateTokenSupplyIndexInternal(token, mToken);
+                distributeSupplierTokenInternal(token, mToken, user);
+            }
+
+            if (borrowers == true && isLendingPool == true) {
+                uint borrowIndex = MToken(mToken).borrowIndex();
+                updateTokenBorrowIndexInternal(token, mToken, borrowIndex);
+                distributeBorrowerTokenInternal(token, mToken, user, borrowIndex);
             }
         }
     }
@@ -309,80 +318,129 @@ contract FarmingDelegate is MomaMasterV1Storage, MomaMasterErrorReporter, Expone
     }
 
     /**
-     * @notice Claim all the tokens accrued by the holders
-     * @param holders The addresses to claim tokens for
-     * @param mTokens The list of markets to claim tokens in
-     * @param tokens The list of tokens to claim
-     * @param borrowers Whether or not to claim tokens earned by borrowing
-     * @param suppliers Whether or not to claim tokens earned by supplying
+     * @notice Distribute all the token accrued to user in specified markets of specified token and claim
+     * @param token The token to distribute
+     * @param mTokens The list of markets to distribute token in
+     * @param suppliers Whether or not to distribute token earned by supplying
+     * @param borrowers Whether or not to distribute token earned by borrowing
      */
-    function claimToken(address[] memory holders, MToken[] memory mTokens, address[] memory tokens, bool borrowers, bool suppliers) public {
-        for (uint t = 0; t < tokens.length; t++) {
-            address token = tokens[t];
-            for (uint i = 0; i < mTokens.length; i++) {
-                MToken mToken = mTokens[i];
-                require(markets[address(mToken)].isListed, "market must be listed");
-                if (borrowers == true) {
-                    uint borrowIndex = mToken.borrowIndex();
-                    updateTokenBorrowIndexInternal(token, address(mToken), borrowIndex);
-                    for (uint j = 0; j < holders.length; j++) {
-                        distributeBorrowerTokenInternal(token, address(mToken), holders[j], borrowIndex);
-                        farmStates[token].accrued[holders[j]] = grantTokenInternal(token, holders[j], farmStates[token].accrued[holders[j]]);
-                    }
-                }
-                if (suppliers == true) {
-                    updateTokenSupplyIndexInternal(token, address(mToken));
-                    for (uint j = 0; j < holders.length; j++) {
-                        distributeSupplierTokenInternal(token, address(mToken), holders[j]);
-                        farmStates[token].accrued[holders[j]] = grantTokenInternal(token, holders[j], farmStates[token].accrued[holders[j]]);
-                    }
-                }
-            }
-        }
-    }
-
-    struct TokenClaimableLocalVars {
-        uint224 _index;
-        uint supplyDelta;
-        uint borrowDelta;
-        address token;
-        uint accrued;
-        uint borrowIndex;
+    function dclaim(address token, MToken[] memory mTokens, bool suppliers, bool borrowers) public {
+        distribute(msg.sender, token, mTokens, suppliers, borrowers);
+        claim(msg.sender, token);
     }
 
     /**
-     * @notice Calculate all the tokens accrued by the holder
-     * @param holder The address to claim tokens for
-     * @param mTokens The list of markets to claim tokens in
-     * @param tokens The list of tokens to claim
-     * @param borrowers Whether or not to claim tokens earned by borrowing
-     * @param suppliers Whether or not to claim tokens earned by supplying
-     * @return The list amount of token the user can claim
+     * @notice Distribute all the token accrued to user in all markets of specified token and claim
+     * @param token The token to distribute
+     * @param suppliers Whether or not to distribute token earned by supplying
+     * @param borrowers Whether or not to distribute token earned by borrowing
      */
-    function tokenClaimable(address holder, MToken[] memory mTokens, address[] memory tokens, bool borrowers, bool suppliers) public view returns (uint[] memory) {
-        uint[] memory results = new uint[](tokens.length);
-        TokenClaimableLocalVars memory vars;
-        for (uint t = 0; t < tokens.length; t++) {
-            vars.token = tokens[t];
-            vars.accrued = farmStates[vars.token].accrued[holder];
-            for (uint i = 0; i < mTokens.length; i++) {
-                MToken mToken = mTokens[i];
-                require(markets[address(mToken)].isListed, "market must be listed");
-                if (borrowers == true) {
-                    vars.borrowIndex = mToken.borrowIndex();
-                    (vars._index, ) = newTokenBorrowIndexInternal(vars.token, address(mToken), vars.borrowIndex);
-                    (, vars.borrowDelta) = newBorrowerTokenInternal(vars.token, address(mToken), holder, vars.borrowIndex, Double({mantissa: vars._index}));
-                    vars.accrued = add_(vars.accrued, vars.borrowDelta);
+    function dclaim(address token, bool suppliers, bool borrowers) public {
+        distribute(msg.sender, token, farmStates[token].tokenMarkets, suppliers, borrowers);
+        claim(msg.sender, token);
+    }
+
+    /**
+     * @notice Distribute all the token accrued to user in all markets of specified tokens and claim
+     * @param tokens The list of tokens to distribute and claim
+     * @param suppliers Whether or not to distribute token earned by supplying
+     * @param borrowers Whether or not to distribute token earned by borrowing
+     */
+    function dclaim(address[] memory tokens, bool suppliers, bool borrowers) public {
+        for (uint i = 0; i < tokens.length; i++) {
+            address token = tokens[i];
+            distribute(msg.sender, token, farmStates[token].tokenMarkets, suppliers, borrowers);
+            claim(msg.sender, token);
+        }
+    }
+
+    /**
+     * @notice Distribute all the token accrued to user in all markets of all tokens and claim
+     * @param suppliers Whether or not to distribute token earned by supplying
+     * @param borrowers Whether or not to distribute token earned by borrowing
+     */
+    function dclaim(bool suppliers, bool borrowers) public {
+        for (uint i = 0; i < allTokens.length; i++) {
+            address token = allTokens[i];
+            distribute(msg.sender, token, farmStates[token].tokenMarkets, suppliers, borrowers);
+            claim(msg.sender, token);
+        }
+    }
+
+    /**
+     * @notice Claim all the token have been distributed to user of specified token
+     * @param token The token to claim
+     */
+    function claim(address token) public {
+        claim(msg.sender, token);
+    }
+
+    /**
+     * @notice Claim all the token have been distributed to user of all tokens
+     */
+    function claim() public {
+        for (uint i = 0; i < allTokens.length; i++) {
+            claim(msg.sender, allTokens[i]);
+        }
+    }
+
+
+    /**
+     * @notice Calculate undistributed token accrued by the user in specified market of specified token
+     * @param user The address to calculate token for
+     * @param token The token to calculate
+     * @param mToken The market to calculate token
+     * @param suppliers Whether or not to calculate token earned by supplying
+     * @param borrowers Whether or not to calculate token earned by borrowing
+     * @return The amount of undistributed token of this user
+     */
+    function undistributed(address user, address token, address mToken, bool suppliers, bool borrowers) public view returns (uint) {
+        uint accrued;
+        uint224 _index;
+        TokenFarmState storage state = farmStates[token];
+        if (suppliers == true) {
+            if (state.speeds[mToken] > 0) {
+                (_index, ) = newTokenSupplyIndexInternal(token, mToken);
+            } else {
+                _index = state.supplyState[mToken].index;
+            }
+            if (uint(_index) > state.supplierIndex[mToken][user]) {
+                (, accrued) = newSupplierTokenInternal(token, mToken, user, Double({mantissa: _index}));
+            }
+        }
+
+        if (borrowers == true && isLendingPool == true) {
+            uint marketBorrowIndex = MToken(mToken).borrowIndex();
+            if (marketBorrowIndex > 0) {
+                if (state.speeds[mToken] > 0) {
+                    (_index, ) = newTokenBorrowIndexInternal(token, mToken, marketBorrowIndex);
+                } else {
+                    _index = state.borrowState[mToken].index;
                 }
-                if (suppliers == true) {
-                    (vars._index, ) = newTokenSupplyIndexInternal(vars.token, address(mToken));
-                    (, vars.supplyDelta) = newSupplierTokenInternal(vars.token, address(mToken), holder, Double({mantissa: vars._index}));
-                    vars.accrued = add_(vars.accrued, vars.supplyDelta);
+                if (uint(_index) > state.borrowerIndex[mToken][user]) {
+                    (, uint _borrowerDelta) = newBorrowerTokenInternal(token, mToken, user, marketBorrowIndex, Double({mantissa: _index}));
+                    accrued = add_(accrued, _borrowerDelta);
                 }
             }
-            results[t] = vars.accrued;
         }
-        return results;
+        return accrued;
+    }
+
+    /**
+     * @notice Calculate undistributed tokens accrued by the user in all markets of specified token
+     * @param user The address to calculate token for
+     * @param token The token to calculate
+     * @param suppliers Whether or not to calculate token earned by supplying
+     * @param borrowers Whether or not to calculate token earned by borrowing
+     * @return The amount of undistributed token of this user in each market
+     */
+    function undistributed(address user, address token, bool suppliers, bool borrowers) public view returns (uint[] memory) {
+        MToken[] memory mTokens = farmStates[token].tokenMarkets;
+        uint[] memory accrued = new uint[](mTokens.length);
+        for (uint i = 0; i < mTokens.length; i++) {
+            accrued[i] = undistributed(user, token, address(mTokens[i]), suppliers, borrowers);
+        }
+        return accrued;
     }
 
 
@@ -396,79 +454,83 @@ contract FarmingDelegate is MomaMasterV1Storage, MomaMasterErrorReporter, Expone
      * @param amount The amount of token to (possibly) transfer
      */
     function _grantToken(address token, address recipient, uint amount) public {
+        require(msg.sender == admin, "only admin can grant token");
+
         uint amountLeft = grantTokenInternal(token, recipient, amount);
         require(amountLeft == 0, "insufficient token for grant");
         emit TokenGranted(token, recipient, amount);
     }
 
     /**
-      * @notice Add/Update erc20 token to farm
-      * @dev Admin function to update token farm
+      * @notice Add erc20 token to farm
+      * @dev Admin function to add farm token, can only call once
       * @param token Token to update for farming
       * @param start Block heiht to start to farm this token
-      * @param end Block heiht to stop farming
-      * @param reset Weather reset token state, afther reset user will lose undistributed token, should after endBlock
       * @return uint 0=success, otherwise a failure
       */
-    function _setTokenFarming(EIP20Interface token, uint start, uint end, bool reset) external returns (uint) {
-        require(end > start, "endBlock less than startBlock");
-        token.totalSupply(); //sanity check it
+    function _addFarmToken(EIP20Interface token, uint start) public returns (uint) {
+        require(msg.sender == admin, "only admin can add farm token");
 
         TokenFarmState storage state = farmStates[address(token)];
-        require(start != 0, "startBlock is 0");
-        require(start > getBlockNumber() || start == state.startBlock, "startBlock check");
         uint oldStartBlock = uint(state.startBlock);
-        uint oldEndBlock = uint(state.endBlock);
+        uint blockNumber = getBlockNumber();
+        require(oldStartBlock == 0, "can only set once");
+        require(start > blockNumber, "startBlock check");
+        token.totalSupply(); // sanity check it
+
         state.startBlock = safe32(start, "start block number exceeds 32 bits");
-        state.endBlock = safe32(end, "end block number exceeds 32 bits");
+        allTokens.push(address(token));
 
-        if (reset == true) _resetTokenState(address(token));
-        if (oldStartBlock == 0) allTokens.push(address(token)); // when first set this token
-
-        emit FarmTokenUpdated(token, oldStartBlock, oldEndBlock, start, end);
+        emit AddFarmToken(token, start);
 
         return uint(Error.NO_ERROR);
     }
 
     /**
-     * @notice Set token speed for a single market
+     * @notice Set token speed for multi markets
+     * @dev Note that token speed could be set to 0 to halt liquidity rewards for a market
      * @param token The token to update speed
-     * @param mToken The market whose token speed to update
-     * @param newSpeed New token speed for market
+     * @param mTokens The markets whose token speed to update
+     * @param newSpeeds New token speeds for markets
      */
-    function _setTokenSpeed(address token, MToken mToken, uint newSpeed) public {
+    function _setTokensSpeed(address token, MToken[] memory mTokens, uint[] memory newSpeeds) public {
+        require(msg.sender == admin, "only admin can set tokens speed");
+
         TokenFarmState storage state = farmStates[token];
-        // require(isFarming(token), "token is not farming");
-        uint currentTokenSpeed = state.speeds[address(mToken)];
-        if (currentTokenSpeed != 0) {
-            // note that token speed could be set to 0 to halt liquidity rewards for a market
+        require(state.startBlock > 0, "token not added");
+        require(mTokens.length == newSpeeds.length, "param length dismatch");
+
+        uint32 blockNumber = safe32(getBlockNumber(), "block number exceeds 32 bits");
+        if (state.startBlock > blockNumber) blockNumber = state.startBlock;
+
+        for (uint i = 0; i < mTokens.length; i++) {
+            MToken mToken = mTokens[i];
+
+            // Update state for market of this token
             uint borrowIndex = mToken.borrowIndex();
             updateTokenSupplyIndexInternal(token, address(mToken));
             updateTokenBorrowIndexInternal(token, address(mToken), borrowIndex);
-        } else if (newSpeed != 0) {
-            // Add the token farming market
-            Market storage market = markets[address(mToken)];
-            require(market.isListed == true, "market is not listed");
-            // !!!to fix: when set speed from 0 to non-zero after set non-zero to 0, should update block to max(blockNumber, startBlock)
 
-            if (state.supplyState[address(mToken)].index == 0 && state.supplyState[address(mToken)].block == 0) {
-                state.supplyState[address(mToken)] = MarketState({
-                    index: momaInitialIndex,
-                    block: state.startBlock
-                });
+            // add this market to tokenMarkets if first set
+            if (!state.isTokenMarket[address(mToken)]) {
+                require(markets[address(mToken)].isListed == true, "market is not listed");
+                state.isTokenMarket[address(mToken)] = true;
+                state.tokenMarkets.push(mToken);
+                emit NewTokenMarket(token, mToken);
+
+                // set initial index of this market
+                state.supplyState[address(mToken)].index = momaInitialIndex;
+                state.borrowState[address(mToken)].index = momaInitialIndex;
             }
 
-            if (state.borrowState[address(mToken)].index == 0 && state.borrowState[address(mToken)].block == 0) {
-                state.borrowState[address(mToken)] = MarketState({
-                    index: momaInitialIndex,
-                    block: state.startBlock
-                });
+            uint oldSpeed = state.speeds[address(mToken)];
+            // update speed and block of this market
+            state.supplyState[address(mToken)].block = blockNumber;
+            state.borrowState[address(mToken)].block = blockNumber;
+            if (oldSpeed != newSpeeds[i]) {
+                state.speeds[address(mToken)] = newSpeeds[i];
+                emit TokenSpeedUpdated(token, mToken, oldSpeed, newSpeeds[i]);
             }
-        }
-
-        if (currentTokenSpeed != newSpeed) {
-            state.speeds[address(mToken)] = newSpeed;
-            emit TokenSpeedUpdated(token, mToken, newSpeed);
         }
     }
 

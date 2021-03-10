@@ -216,12 +216,10 @@ contract MomaFarming is ExponentialNoError {
             supplierIndex.mantissa = momaInitialIndex;
         }
 
-        if (supplyIndex.mantissa > supplierIndex.mantissa) {
-            Double memory deltaIndex = sub_(supplyIndex, supplierIndex);
-            uint supplierTokens = mToken.balanceOf(supplier);
-            _supplierDelta = mul_(supplierTokens, deltaIndex);
-            _supplierAccrued = add_(_supplierAccrued, _supplierDelta);
-        }
+        Double memory deltaIndex = sub_(supplyIndex, supplierIndex);
+        uint supplierTokens = mToken.balanceOf(supplier);
+        _supplierDelta = mul_(supplierTokens, deltaIndex);
+        _supplierAccrued = add_(_supplierAccrued, _supplierDelta);
         return (_supplierAccrued, _supplierDelta);
     }
 
@@ -260,7 +258,7 @@ contract MomaFarming is ExponentialNoError {
         uint _borrowerAccrued = momaAccrued[borrower];
         uint _borrowerDelta = 0;
 
-        if (borrowerIndex.mantissa > 0 && borrowIndex.mantissa > borrowerIndex.mantissa) {
+        if (borrowerIndex.mantissa > 0) {
             Double memory deltaIndex = sub_(borrowIndex, borrowerIndex);
             uint borrowerAmount = div_(mToken.borrowBalanceStored(borrower), Exp({mantissa: marketBorrowIndex}));
             _borrowerDelta = mul_(borrowerAmount, deltaIndex);
@@ -542,23 +540,30 @@ contract MomaFarming is ExponentialNoError {
      */
     function undistributed(address user, address pool, MToken mToken, bool suppliers, bool borrowers) public view returns (uint) {
         uint accrued;
+        uint _index;
         MarketState storage state = marketStates[pool][address(mToken)];
-        if (state.weight > 0) { // momaTotalWeight > 0
-            if (suppliers == true) {
-                (uint _index, ) = newMarketSupplyStateInternal(pool, mToken);
-                if (_index > state.supplierIndex[user]) {
-                    (, accrued) = newSupplierMomaInternal(pool, mToken, user, Double({mantissa: _index}));
-                }
+        if (suppliers == true) {
+            if (state.weight > 0) { // momaTotalWeight > 0
+                (_index, ) = newMarketSupplyStateInternal(pool, mToken);
+            } else {
+                _index = state.supplyIndex;
             }
+            if (_index > state.supplierIndex[user]) {
+                (, accrued) = newSupplierMomaInternal(pool, mToken, user, Double({mantissa: _index}));
+            }
+        }
 
-            if (borrowers == true && isMomaLendingPool[pool] == true) {
-                uint marketBorrowIndex = mToken.borrowIndex();
-                if (marketBorrowIndex > 0) {
-                    (uint _index, ) = newMarketBorrowStateInternal(pool, mToken, marketBorrowIndex);
-                    if (_index > state.borrowerIndex[user]) {
-                        (, uint _borrowerDelta) = newBorrowerMomaInternal(pool, mToken, user, marketBorrowIndex, Double({mantissa: _index}));
-                        accrued = add_(accrued, _borrowerDelta);
-                    }
+        if (borrowers == true && isMomaLendingPool[pool] == true) {
+            uint marketBorrowIndex = mToken.borrowIndex();
+            if (marketBorrowIndex > 0) {
+                if (state.weight > 0) { // momaTotalWeight > 0
+                    (_index, ) = newMarketBorrowStateInternal(pool, mToken, marketBorrowIndex);
+                } else {
+                    _index = state.borrowIndex;
+                }
+                if (_index > state.borrowerIndex[user]) {
+                    (, uint _borrowerDelta) = newBorrowerMomaInternal(pool, mToken, user, marketBorrowIndex, Double({mantissa: _index}));
+                    accrued = add_(accrued, _borrowerDelta);
                 }
             }
         }
