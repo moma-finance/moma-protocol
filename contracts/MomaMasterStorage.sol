@@ -127,6 +127,9 @@ contract MomaMasterV1Storage is MomaPoolAdminStorage {
         /// @notice The block number to start to farm this token
         uint32 startBlock;
 
+        /// @notice The block number to start to farm this token
+        uint32 endBlock;
+
         /// @notice The portion of tokenRate that each market currently receives
         mapping(address => uint) speeds;
 

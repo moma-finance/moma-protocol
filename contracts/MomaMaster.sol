@@ -60,8 +60,8 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
     /// @notice Emitted when token is claimed by user
     event TokenClaimed(address indexed token, address indexed user, uint accrued, uint claimed, uint notClaimed);
 
-    /// @notice Emitted when farm token is added by admin
-    event AddFarmToken(EIP20Interface token, uint start);
+    /// @notice Emitted when token farm is updated by admin
+     event TokenFarmUpdated(EIP20Interface token, uint oldStart, uint oldEnd, uint newStart, uint newEnd);
 
     /// @notice Emitted when a new token market is added to momaMarkets
     event NewTokenMarket(address indexed token, MToken indexed mToken);
@@ -1087,6 +1087,7 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
             uint32 nextBlock = blockNumber;
             TokenFarmState storage state = farmStates[token];
             if (state.startBlock > blockNumber) nextBlock = state.startBlock;
+            // if (state.endBlock < blockNumber) blockNumber = state.endBlock;
 
             MToken[] memory mTokens = state.tokenMarkets;
             for (uint j = 0; j < mTokens.length; j++) {
@@ -1294,14 +1295,15 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
     }
 
     /**
-      * @notice Add erc20 token to farm
-      * @dev Admin function to add farm token, can only call once
-      * @param token Token to update for farming
+      * @notice Admin function to add/update erc20 token farming
+      * @dev Can only add token or restart this token farm again after endBlock
+      * @param token Token to add/update for farming
       * @param start Block heiht to start to farm this token
+      * @param end Block heiht to stop farming
       * @return uint 0=success, otherwise a failure
       */
-    function _addFarmToken(EIP20Interface token, uint start) external returns (uint) {
-        bytes memory data = delegateToFarming(abi.encodeWithSignature("_addFarmToken(address,uint256)", token, start));
+    function _setTokenFarm(EIP20Interface token, uint start, uint end) public returns (uint) {
+        bytes memory data = delegateToFarming(abi.encodeWithSignature("_setTokenFarm(address,uint256,uint256)", token, start, end));
         return abi.decode(data, (uint));
     }
 
@@ -1377,7 +1379,7 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
     function isFarming(address token, address market) public view returns (bool) {
         uint blockNumber = getBlockNumber();
         TokenFarmState storage state = farmStates[token];
-        return state.speeds[market] > 0 && blockNumber > uint(state.startBlock);
+        return state.speeds[market] > 0 && blockNumber > uint(state.startBlock) && blockNumber <= uint(state.endBlock);
     }
 
     /**

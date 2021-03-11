@@ -23,8 +23,8 @@ contract FarmingDelegate is MomaMasterV1Storage, MomaMasterErrorReporter, Expone
     /// @notice Emitted when token is claimed by user
     event TokenClaimed(address indexed token, address indexed user, uint accrued, uint claimed, uint notClaimed);
 
-    /// @notice Emitted when farm token is added by admin
-    event AddFarmToken(EIP20Interface token, uint start);
+    /// @notice Emitted when token farm is updated by admin
+     event TokenFarmUpdated(EIP20Interface token, uint oldStart, uint oldEnd, uint newStart, uint newEnd);
 
     /// @notice Emitted when a new token market is added to momaMarkets
     event NewTokenMarket(address indexed token, MToken indexed mToken);
@@ -50,9 +50,12 @@ contract FarmingDelegate is MomaMasterV1Storage, MomaMasterErrorReporter, Expone
         uint224 _index = supplyState.index;
         uint32 _block = supplyState.block;
         uint blockNumber = getBlockNumber();
+        uint32 endBlock = farmStates[token].endBlock;
 
-        if (blockNumber > uint(_block) && blockNumber > uint(farmStates[token].startBlock)) {
+        if (blockNumber > uint(_block) && blockNumber > uint(farmStates[token].startBlock) && _block < endBlock) {
             uint supplySpeed = farmStates[token].speeds[mToken];
+            // if (farmStates[token].startBlock > _block) _block = farmStates[token].startBlock; // we make sure _block >= startBlock
+            if (blockNumber > uint(endBlock)) blockNumber = uint(endBlock);
             uint deltaBlocks = sub_(blockNumber, uint(_block)); // deltaBlocks will always > 0
             uint tokenAccrued = mul_(deltaBlocks, supplySpeed);
             uint supplyTokens = MToken(mToken).totalSupply();
@@ -94,9 +97,12 @@ contract FarmingDelegate is MomaMasterV1Storage, MomaMasterErrorReporter, Expone
         uint224 _index = borrowState.index;
         uint32 _block = borrowState.block;
         uint blockNumber = getBlockNumber();
+        uint32 endBlock = farmStates[token].endBlock;
 
-        if (blockNumber > uint(_block) && blockNumber > uint(farmStates[token].startBlock)) {
+        if (blockNumber > uint(_block) && blockNumber > uint(farmStates[token].startBlock) && _block < endBlock) {
             uint borrowSpeed = farmStates[token].speeds[mToken];
+            // if (farmStates[token].startBlock > _block) _block = farmStates[token].startBlock; // we make sure _block >= startBlock
+            if (blockNumber > uint(endBlock)) blockNumber = uint(endBlock);
             uint deltaBlocks = sub_(blockNumber, uint(_block)); // deltaBlocks will always > 0
             uint tokenAccrued = mul_(deltaBlocks, borrowSpeed);
             uint borrowAmount = div_(MToken(mToken).totalBorrows(), Exp({mantissa: marketBorrowIndex}));
@@ -462,26 +468,52 @@ contract FarmingDelegate is MomaMasterV1Storage, MomaMasterErrorReporter, Expone
     }
 
     /**
-      * @notice Add erc20 token to farm
-      * @dev Admin function to add farm token, can only call once
-      * @param token Token to update for farming
+      * @notice Admin function to add/update erc20 token farming
+      * @dev Can only add token or restart this token farm again after endBlock
+      * @param token Token to add/update for farming
       * @param start Block heiht to start to farm this token
+      * @param end Block heiht to stop farming
       * @return uint 0=success, otherwise a failure
       */
-    function _addFarmToken(EIP20Interface token, uint start) public returns (uint) {
+    function _setTokenFarm(EIP20Interface token, uint start, uint end) public returns (uint) {
         require(msg.sender == admin, "only admin can add farm token");
+        require(end > start, "end less than start");
+        // require(start > 0, "start is 0");
 
         TokenFarmState storage state = farmStates[address(token)];
         uint oldStartBlock = uint(state.startBlock);
+        uint oldEndBlock = uint(state.endBlock);
         uint blockNumber = getBlockNumber();
-        require(oldStartBlock == 0, "can only set once");
-        require(start > blockNumber, "startBlock check");
-        token.totalSupply(); // sanity check it
+        require(blockNumber > oldEndBlock, "not first set or this round is not end");
+        require(start > blockNumber, "start must largger than this block number");
 
-        state.startBlock = safe32(start, "start block number exceeds 32 bits");
-        allTokens.push(address(token));
+        uint32 newStart = safe32(start, "start block number exceeds 32 bits");
 
-        emit AddFarmToken(token, start);
+        // first set this token
+        if (oldStartBlock == 0 && oldEndBlock == 0) {
+            token.totalSupply(); // sanity check it
+            allTokens.push(address(token));
+        // restart this token farm
+        } else {
+            // update all markets state of this token
+            for (uint i = 0; i < state.tokenMarkets.length; i++) {
+                MToken mToken = state.tokenMarkets[i];
+
+                // update state for non-zero speed market of this token
+                uint borrowIndex = mToken.borrowIndex();
+                updateTokenSupplyIndexInternal(address(token), address(mToken));
+                updateTokenBorrowIndexInternal(address(token), address(mToken), borrowIndex);
+
+                // no matter what we update the block to new start especially for 0 speed token markets
+                state.supplyState[address(mToken)].block = newStart;
+                state.borrowState[address(mToken)].block = newStart;
+            }
+        }
+
+        // update startBlock and endBlock
+        state.startBlock = newStart;
+        state.endBlock = safe32(end, "end block number exceeds 32 bits");
+        emit TokenFarmUpdated(token, oldStartBlock, oldEndBlock, start, end);
 
         return uint(Error.NO_ERROR);
     }
@@ -502,14 +534,10 @@ contract FarmingDelegate is MomaMasterV1Storage, MomaMasterErrorReporter, Expone
 
         uint32 blockNumber = safe32(getBlockNumber(), "block number exceeds 32 bits");
         if (state.startBlock > blockNumber) blockNumber = state.startBlock;
+        // if (state.endBlock < blockNumber) blockNumber = state.endBlock;
 
         for (uint i = 0; i < mTokens.length; i++) {
             MToken mToken = mTokens[i];
-
-            // Update state for market of this token
-            uint borrowIndex = mToken.borrowIndex();
-            updateTokenSupplyIndexInternal(token, address(mToken));
-            updateTokenBorrowIndexInternal(token, address(mToken), borrowIndex);
 
             // add this market to tokenMarkets if first set
             if (!state.isTokenMarket[address(mToken)]) {
@@ -521,6 +549,11 @@ contract FarmingDelegate is MomaMasterV1Storage, MomaMasterErrorReporter, Expone
                 // set initial index of this market
                 state.supplyState[address(mToken)].index = momaInitialIndex;
                 state.borrowState[address(mToken)].index = momaInitialIndex;
+            } else {
+                // Update state for market of this token
+                uint borrowIndex = mToken.borrowIndex();
+                updateTokenSupplyIndexInternal(token, address(mToken));
+                updateTokenBorrowIndexInternal(token, address(mToken), borrowIndex);
             }
 
             uint oldSpeed = state.speeds[address(mToken)];
