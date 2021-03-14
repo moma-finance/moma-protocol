@@ -18,7 +18,6 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
     /**
      * @notice Initialize the money market
      * @param momaMaster_ The address of the MomaMaster
-     * @param interestRateModel_ The address of the interest rate model
      * @param initialExchangeRateMantissa_ The initial exchange rate, scaled by 1e18
      * @param name_ EIP-20 name of this token
      * @param symbol_ EIP-20 symbol of this token
@@ -27,7 +26,6 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
      * @param feeReceiver_ Address of the free receiver of this token
      */
     function initialize(MomaMasterInterface momaMaster_,
-                        InterestRateModel interestRateModel_,
                         uint initialExchangeRateMantissa_,
                         string memory name_,
                         string memory symbol_,
@@ -35,7 +33,7 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
                         address payable feeAdmin_,
                         address payable feeReceiver_) public {
         require(msg.sender == admin, "only admin may initialize the market");
-        require(accrualBlockNumber == 0 && borrowIndex == 0, "market may only be initialized once");
+        require(initialExchangeRateMantissa == 0, "market may only be initialized once");
 
         // Set initial exchange rate
         initialExchangeRateMantissa = initialExchangeRateMantissa_;
@@ -44,14 +42,6 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
         // Set the momaMaster
         uint err = _setMomaMaster(momaMaster_);
         require(err == uint(Error.NO_ERROR), "setting momaMaster failed");
-
-        // Initialize block number and borrow index (block number mocks depend on momaMaster being set)
-        accrualBlockNumber = getBlockNumber();
-        borrowIndex = mantissaOne;
-
-        // Set the interest rate model (depends on block number / borrow index)
-        err = _setInterestRateModelFresh(interestRateModel_);
-        require(err == uint(Error.NO_ERROR), "setting interest rate model failed");
 
         name = name_;
         symbol = symbol_;
@@ -67,8 +57,8 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
      * @notice Read the factory address from momaMaster
      * @return Factory address
      */
-    function factory() public view returns (address) {
-        return momaMaster.factory();
+    function factory() public view returns (MomaFactoryInterface) {
+        return MomaFactoryInterface(momaMaster.factory());
     }
 
     /**
@@ -426,6 +416,11 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
      *   up to the current block and writes new checkpoint to storage.
      */
     function accrueInterest() public returns (uint) {
+        /* Short-circuit if not set interestRateModel, that means this is launch pool */
+        if (address(interestRateModel) == address(0)) {
+            return uint(Error.NO_ERROR);
+        }
+
         /* Remember the initial block number */
         // uint currentBlockNumber = getBlockNumber();
         // uint accrualBlockNumberPrior = accrualBlockNumber;
@@ -568,7 +563,7 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
         }
 
         /* Verify market's block number equals current block number */
-        if (accrualBlockNumber != getBlockNumber()) {
+        if (address(interestRateModel) != address(0) && accrualBlockNumber != getBlockNumber()) {
             return (fail(Error.MARKET_NOT_FRESH, FailureInfo.MINT_FRESHNESS_CHECK), 0);
         }
 
@@ -722,7 +717,7 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
         }
 
         /* Verify market's block number equals current block number */
-        if (accrualBlockNumber != getBlockNumber()) {
+        if (address(interestRateModel) != address(0) && accrualBlockNumber != getBlockNumber()) {
             return fail(Error.MARKET_NOT_FRESH, FailureInfo.REDEEM_FRESHNESS_CHECK);
         }
 
@@ -1433,7 +1428,7 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
         // _collectMomaFeesFresh emits collect-moma-fee-specific logs on errors, so we don't need to.
 
         // Read the current moma fee admin and receiver from factory
-        MomaFactoryInterface fct = MomaFactoryInterface(factory());
+        MomaFactoryInterface fct = factory();
         address momaFeeAdmin = fct.getMomaFeeAdmin(address(momaMaster));
         address payable momaFeeReceiver = fct.getMomaFeeReceiver(address(momaMaster));
         // Check caller is momaFeeAdmin or momaFeeReceiver
@@ -1478,7 +1473,7 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
         }
 
         // Read the current moma fee receiver from factory
-        address payable momaFeeReceiver = MomaFactoryInterface(factory()).getMomaFeeReceiver(address(momaMaster));
+        address payable momaFeeReceiver = factory().getMomaFeeReceiver(address(momaMaster));
 
         /////////////////////////
         // EFFECTS & INTERACTIONS
@@ -1703,7 +1698,7 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
         }
 
         // We fail gracefully unless market's block number equals current block number
-        if (accrualBlockNumber != getBlockNumber()) {
+        if (address(interestRateModel) != address(0) && accrualBlockNumber != getBlockNumber()) {
             return fail(Error.MARKET_NOT_FRESH, FailureInfo.SET_INTEREST_RATE_MODEL_FRESH_CHECK);
         }
 
@@ -1718,6 +1713,12 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
 
         // Emit NewMarketInterestRateModel(oldInterestRateModel, newInterestRateModel)
         emit NewMarketInterestRateModel(oldInterestRateModel, newInterestRateModel);
+
+        // Initialize block number and borrow index
+        if (accrualBlockNumber == 0 && borrowIndex == 0) {
+            accrualBlockNumber = getBlockNumber();
+            borrowIndex = mantissaOne;
+        }
 
         return uint(Error.NO_ERROR);
     }

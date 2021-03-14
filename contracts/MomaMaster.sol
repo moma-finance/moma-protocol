@@ -478,6 +478,7 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
         uint repayAmount) external returns (uint) {
         // Shh - currently unused
         liquidator;
+        require(isLendingPool == true, "this is not lending pool");
 
         if (!markets[mTokenBorrowed].isListed || !markets[mTokenCollateral].isListed) {
             return uint(Error.MARKET_NOT_LISTED);
@@ -547,6 +548,7 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
         uint seizeTokens) external returns (uint) {
         // Pausing is a very serious situation - we revert to sound the alarms
         require(!seizeGuardianPaused, "seize is paused");
+        require(isLendingPool == true, "this is not lending pool");
 
         // Shh - currently unused
         seizeTokens;
@@ -1014,6 +1016,16 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
 
     function _upgradeLendingPool() public returns (bool) {
         require(msg.sender == admin, "only admin can upgrade");
+
+        // must set oracle first
+        require(address(oracle) != address(0), "oracle not set");
+
+        // all markets must set interestRateModel
+        for (uint i = 0; i < allMarkets.length; i++) {
+            MToken mToken = allMarkets[i];
+            require(address(mToken.interestRateModel()) != address(0), "support market not set interestRateModel");
+            // require(oracle.getUnderlyingPrice(mToken) != 0, "support market not set price"); // let functions check
+        }
 
         bool state = MomaFactoryInterface(factory).upgradeLendingPool();
         if (state == true) {

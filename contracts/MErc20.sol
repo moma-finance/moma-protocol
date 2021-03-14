@@ -12,7 +12,6 @@ contract MErc20 is MToken, MErc20Interface {
      * @notice Initialize the new money market
      * @param underlying_ The address of the underlying asset
      * @param momaMaster_ The address of the momaMaster
-     * @param interestRateModel_ The address of the interest rate model
      * @param initialExchangeRateMantissa_ The initial exchange rate, scaled by 1e18
      * @param name_ ERC-20 name of this token
      * @param symbol_ ERC-20 symbol of this token
@@ -22,7 +21,6 @@ contract MErc20 is MToken, MErc20Interface {
      */
     function initialize(address underlying_,
                         MomaMasterInterface momaMaster_,
-                        InterestRateModel interestRateModel_,
                         uint initialExchangeRateMantissa_,
                         string memory name_,
                         string memory symbol_,
@@ -30,7 +28,7 @@ contract MErc20 is MToken, MErc20Interface {
                         address payable feeAdmin_,
                         address payable feeReceiver_) public {
         // MToken initialize does the bulk of the work
-        super.initialize(momaMaster_, interestRateModel_, initialExchangeRateMantissa_, name_, symbol_, decimals_, feeAdmin_, feeReceiver_);
+        super.initialize(momaMaster_, initialExchangeRateMantissa_, name_, symbol_, decimals_, feeAdmin_, feeReceiver_);
 
         // Set underlying and sanity check it
         underlying = underlying_;

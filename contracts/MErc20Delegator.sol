@@ -12,7 +12,6 @@ contract MErc20Delegator is MTokenInterface, MErc20Interface, MDelegatorInterfac
      * @notice Construct a new money market
      * @param underlying_ The address of the underlying asset
      * @param momaMaster_ The address of the momaMaster
-     * @param interestRateModel_ The address of the interest rate model
      * @param initialExchangeRateMantissa_ The initial exchange rate, scaled by 1e18
      * @param name_ ERC-20 name of this token
      * @param symbol_ ERC-20 symbol of this token
@@ -25,7 +24,6 @@ contract MErc20Delegator is MTokenInterface, MErc20Interface, MDelegatorInterfac
      */
     constructor(address underlying_,
                 MomaMasterInterface momaMaster_,
-                InterestRateModel interestRateModel_,
                 uint initialExchangeRateMantissa_,
                 string memory name_,
                 string memory symbol_,
@@ -39,10 +37,9 @@ contract MErc20Delegator is MTokenInterface, MErc20Interface, MDelegatorInterfac
         admin = msg.sender;
 
         // First delegate gets to initialize the delegator (i.e. storage contract)
-        delegateTo(implementation_, abi.encodeWithSignature("initialize(address,address,address,uint256,string,string,uint8,address,address)",
+        delegateTo(implementation_, abi.encodeWithSignature("initialize(address,address,uint256,string,string,uint8,address,address)",
                                                             underlying_,
                                                             momaMaster_,
-                                                            interestRateModel_,
                                                             initialExchangeRateMantissa_,
                                                             name_,
                                                             symbol_,
