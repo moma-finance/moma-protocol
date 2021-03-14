@@ -22,7 +22,7 @@ contract MMomaLikeDelegate is MErc20Delegate {
    * @param compLikeDelegatee The address to delegate votes to
    */
   function _delegateCompLikeTo(address compLikeDelegatee) external {
-    require(msg.sender == admin, "only the admin may set the comp-like delegate");
+    require(msg.sender == momaMaster.admin(), "only the admin may set the comp-like delegate");
     CompLike(underlying).delegate(compLikeDelegatee);
   }
 }

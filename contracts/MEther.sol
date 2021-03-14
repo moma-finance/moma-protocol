@@ -15,8 +15,6 @@ contract MEther is MToken {
      * @param name_ ERC-20 name of this token
      * @param symbol_ ERC-20 symbol of this token
      * @param decimals_ ERC-20 decimal precision of this token
-     * @param admin_ Address of the administrator of this token
-     * @param feeAdmin_ Address of the fee administrator of this token
      * @param feeReceiver_ Address of the free receiver of this token
      */
     constructor(MomaMasterInterface momaMaster_,
@@ -24,16 +22,10 @@ contract MEther is MToken {
                 string memory name_,
                 string memory symbol_,
                 uint8 decimals_,
-                address payable admin_,
-                address payable feeAdmin_,
                 address payable feeReceiver_) public {
-        // Creator of the contract is admin during initialization
-        admin = msg.sender;
 
-        initialize(momaMaster_, initialExchangeRateMantissa_, name_, symbol_, decimals_, feeAdmin_, feeReceiver_);
+        initialize(momaMaster_, initialExchangeRateMantissa_, name_, symbol_, decimals_, feeReceiver_);
 
-        // Set the proper admin now that initialization is done
-        admin = admin_;
     }
 
 

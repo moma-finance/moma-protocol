@@ -5,6 +5,7 @@ interface MomaMasterInterface {
     function isMomaMaster() external view returns (bool);
 
     function factory() external view returns (address);
+    function admin() external view returns (address payable);
 
     /*** Assets You Are In ***/
 

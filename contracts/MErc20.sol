@@ -16,7 +16,6 @@ contract MErc20 is MToken, MErc20Interface {
      * @param name_ ERC-20 name of this token
      * @param symbol_ ERC-20 symbol of this token
      * @param decimals_ ERC-20 decimal precision of this token
-     * @param feeAdmin_ Address of the fee administrator of this token
      * @param feeReceiver_ Address of the free receiver of this token
      */
     function initialize(address underlying_,
@@ -25,10 +24,9 @@ contract MErc20 is MToken, MErc20Interface {
                         string memory name_,
                         string memory symbol_,
                         uint8 decimals_,
-                        address payable feeAdmin_,
                         address payable feeReceiver_) public {
         // MToken initialize does the bulk of the work
-        super.initialize(momaMaster_, initialExchangeRateMantissa_, name_, symbol_, decimals_, feeAdmin_, feeReceiver_);
+        super.initialize(momaMaster_, initialExchangeRateMantissa_, name_, symbol_, decimals_, feeReceiver_);
 
         // Set underlying and sanity check it
         underlying = underlying_;

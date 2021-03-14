@@ -16,10 +16,8 @@ contract MErc20Delegator is MTokenInterface, MErc20Interface, MDelegatorInterfac
      * @param name_ ERC-20 name of this token
      * @param symbol_ ERC-20 symbol of this token
      * @param decimals_ ERC-20 decimal precision of this token
-     * @param admin_ Address of the administrator of this token
      * @param implementation_ The address of the implementation the contract delegates to
      * @param becomeImplementationData The encoded args for becomeImplementation
-     * @param feeAdmin_ Address of the fee administrator of this token
      * @param feeReceiver_ Address of the free receiver of this token
      */
     constructor(address underlying_,
@@ -28,30 +26,23 @@ contract MErc20Delegator is MTokenInterface, MErc20Interface, MDelegatorInterfac
                 string memory name_,
                 string memory symbol_,
                 uint8 decimals_,
-                address payable admin_,
                 address implementation_,
                 bytes memory becomeImplementationData,
-                address payable feeAdmin_,
                 address payable feeReceiver_) public {
-        // Creator of the contract is admin during initialization
-        admin = msg.sender;
 
         // First delegate gets to initialize the delegator (i.e. storage contract)
-        delegateTo(implementation_, abi.encodeWithSignature("initialize(address,address,uint256,string,string,uint8,address,address)",
+        delegateTo(implementation_, abi.encodeWithSignature("initialize(address,address,uint256,string,string,uint8,address)",
                                                             underlying_,
                                                             momaMaster_,
                                                             initialExchangeRateMantissa_,
                                                             name_,
                                                             symbol_,
                                                             decimals_,
-                                                            feeAdmin_,
                                                             feeReceiver_));
 
         // New implementations always get set via the settor (post-initialize)
         _setImplementation(implementation_, false, becomeImplementationData);
 
-        // Set the proper admin now that initialization is done
-        admin = admin_;
     }
 
     /**
@@ -61,7 +52,7 @@ contract MErc20Delegator is MTokenInterface, MErc20Interface, MDelegatorInterfac
      * @param becomeImplementationData The encoded bytes data to be passed to _becomeImplementation
      */
     function _setImplementation(address implementation_, bool allowResign, bytes memory becomeImplementationData) public {
-        require(msg.sender == admin, "MErc20Delegator::_setImplementation: Caller must be admin");
+        require(msg.sender == momaMaster.admin(), "MErc20Delegator::_setImplementation: Caller must be admin");
 
         if (allowResign) {
             delegateToImplementation(abi.encodeWithSignature("_resignImplementation()"));
@@ -333,17 +324,6 @@ contract MErc20Delegator is MTokenInterface, MErc20Interface, MDelegatorInterfac
     /*** Admin Functions ***/
 
     /**
-      * @notice Begins transfer of admin rights. The newPendingAdmin must call `_acceptAdmin` to finalize the transfer.
-      * @dev Admin function to begin change of admin. The newPendingAdmin must call `_acceptAdmin` to finalize the transfer.
-      * @param newPendingAdmin New pending admin.
-      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
-      */
-    function _setPendingAdmin(address payable newPendingAdmin) external returns (uint) {
-        bytes memory data = delegateToImplementation(abi.encodeWithSignature("_setPendingAdmin(address)", newPendingAdmin));
-        return abi.decode(data, (uint));
-    }
-
-    /**
       * @notice Sets a new momaMaster for the market
       * @dev Admin function to set a new momaMaster
       * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
@@ -360,16 +340,6 @@ contract MErc20Delegator is MTokenInterface, MErc20Interface, MDelegatorInterfac
       */
     function _setReserveFactor(uint newReserveFactorMantissa) external returns (uint) {
         bytes memory data = delegateToImplementation(abi.encodeWithSignature("_setReserveFactor(uint256)", newReserveFactorMantissa));
-        return abi.decode(data, (uint));
-    }
-
-    /**
-      * @notice Accepts transfer of admin rights. msg.sender must be pendingAdmin
-      * @dev Admin function for pending admin to accept role and update admin
-      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
-      */
-    function _acceptAdmin() external returns (uint) {
-        bytes memory data = delegateToImplementation(abi.encodeWithSignature("_acceptAdmin()"));
         return abi.decode(data, (uint));
     }
 

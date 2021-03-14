@@ -46,21 +46,6 @@ contract MTokenStorage {
     uint internal constant reserveFactorMaxMantissa = 1e18;
 
     /**
-     * @notice Administrator for this contract
-     */
-    address payable public admin;
-
-    /**
-     * @notice Pending administrator for this contract
-     */
-    address payable public pendingAdmin;
-
-    /**
-     * @notice Fee admin for this market
-     */
-    address payable public feeAdmin;
-
-    /**
      * @notice Fee receiver for this market
      */
     address payable public feeReceiver;
@@ -194,16 +179,6 @@ contract MTokenInterface is MTokenStorage {
     /*** Admin Events ***/
 
     /**
-     * @notice Event emitted when pendingAdmin is changed
-     */
-    event NewPendingAdmin(address oldPendingAdmin, address newPendingAdmin);
-
-    /**
-     * @notice Event emitted when pendingAdmin is accepted, which means admin is updated
-     */
-    event NewAdmin(address oldAdmin, address newAdmin);
-
-    /**
      * @notice Event emitted when momaMaster is changed
      */
     event NewMomaMaster(MomaMasterInterface oldMomaMaster, MomaMasterInterface newMomaMaster);
@@ -212,11 +187,6 @@ contract MTokenInterface is MTokenStorage {
      * @notice Event emitted when interestRateModel is changed
      */
     event NewMarketInterestRateModel(InterestRateModel oldInterestRateModel, InterestRateModel newInterestRateModel);
-
-    /**
-     * @notice Event emitted when feeAdmin is changed
-     */
-    event NewFeeAdmin(address oldFeeAdmin, address newFeeAdmin);
 
     /**
      * @notice Event emitted when feeReceiver is changed
@@ -293,10 +263,7 @@ contract MTokenInterface is MTokenStorage {
 
     /*** Admin Functions ***/
 
-    function _setPendingAdmin(address payable newPendingAdmin) external returns (uint);
-    function _acceptAdmin() external returns (uint);
     function _setMomaMaster(MomaMasterInterface newMomaMaster) public returns (uint);
-    function _setFeeAdmin(address payable newFeeAdmin) public returns (uint);
     function _setFeeReceiver(address payable newFeeReceiver) public returns (uint);
     function _setFeeFactor(uint newFeeFactorMantissa) external returns (uint);
     function _collectFees(uint collectAmount) external returns (uint);

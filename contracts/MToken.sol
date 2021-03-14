@@ -22,7 +22,6 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
      * @param name_ EIP-20 name of this token
      * @param symbol_ EIP-20 symbol of this token
      * @param decimals_ EIP-20 decimal precision of this token
-     * @param feeAdmin_ Address of the fee administrator of this token
      * @param feeReceiver_ Address of the free receiver of this token
      */
     function initialize(MomaMasterInterface momaMaster_,
@@ -30,23 +29,22 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
                         string memory name_,
                         string memory symbol_,
                         uint8 decimals_,
-                        address payable feeAdmin_,
                         address payable feeReceiver_) public {
-        require(msg.sender == admin, "only admin may initialize the market");
+        require(msg.sender == momaMaster_.admin(), "only admin may initialize the market");
         require(initialExchangeRateMantissa == 0, "market may only be initialized once");
 
         // Set initial exchange rate
         initialExchangeRateMantissa = initialExchangeRateMantissa_;
         require(initialExchangeRateMantissa > 0, "initial exchange rate must be greater than zero.");
 
+        // Ensure invoke momaMaster.isMomaMaster() returns true
+        require(momaMaster_.isMomaMaster(), "marker method returned false");
         // Set the momaMaster
-        uint err = _setMomaMaster(momaMaster_);
-        require(err == uint(Error.NO_ERROR), "setting momaMaster failed");
+        momaMaster = momaMaster_;
 
         name = name_;
         symbol = symbol_;
         decimals = decimals_;
-        feeAdmin = feeAdmin_;
         feeReceiver = feeReceiver_;
 
         // The counter starts true to prevent changing it from zero to non-zero (i.e. smaller cost/refund)
@@ -1155,64 +1153,13 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
     /*** Admin Functions ***/
 
     /**
-      * @notice Begins transfer of admin rights. The newPendingAdmin must call `_acceptAdmin` to finalize the transfer.
-      * @dev Admin function to begin change of admin. The newPendingAdmin must call `_acceptAdmin` to finalize the transfer.
-      * @param newPendingAdmin New pending admin.
-      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
-      */
-    function _setPendingAdmin(address payable newPendingAdmin) external returns (uint) {
-        // Check caller = admin
-        if (msg.sender != admin) {
-            return fail(Error.UNAUTHORIZED, FailureInfo.SET_PENDING_ADMIN_OWNER_CHECK);
-        }
-
-        // Save current value, if any, for inclusion in log
-        address oldPendingAdmin = pendingAdmin;
-
-        // Store pendingAdmin with value newPendingAdmin
-        pendingAdmin = newPendingAdmin;
-
-        // Emit NewPendingAdmin(oldPendingAdmin, newPendingAdmin)
-        emit NewPendingAdmin(oldPendingAdmin, newPendingAdmin);
-
-        return uint(Error.NO_ERROR);
-    }
-
-    /**
-      * @notice Accepts transfer of admin rights. msg.sender must be pendingAdmin
-      * @dev Admin function for pending admin to accept role and update admin
-      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
-      */
-    function _acceptAdmin() external returns (uint) {
-        // Check caller is pendingAdmin and pendingAdmin ≠ address(0)
-        if (msg.sender != pendingAdmin || msg.sender == address(0)) {
-            return fail(Error.UNAUTHORIZED, FailureInfo.ACCEPT_ADMIN_PENDING_ADMIN_CHECK);
-        }
-
-        // Save current values for inclusion in log
-        address oldAdmin = admin;
-        address oldPendingAdmin = pendingAdmin;
-
-        // Store admin with value pendingAdmin
-        admin = pendingAdmin;
-
-        // Clear the pending value
-        pendingAdmin = address(0);
-
-        emit NewAdmin(oldAdmin, admin);
-        emit NewPendingAdmin(oldPendingAdmin, pendingAdmin);
-
-        return uint(Error.NO_ERROR);
-    }
-
-    /**
       * @notice Sets a new momaMaster for the market
       * @dev Admin function to set a new momaMaster
       * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
       */
     function _setMomaMaster(MomaMasterInterface newMomaMaster) public returns (uint) {
         // Check caller is admin
-        if (msg.sender != admin) {
+        if (msg.sender != momaMaster.admin()) {
             return fail(Error.UNAUTHORIZED, FailureInfo.SET_MOMAMASTER_OWNER_CHECK);
         }
 
@@ -1230,35 +1177,13 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
     }
 
     /**
-      * @notice Sets a new feeAdmin for the market
-      * @dev feeAdmin function to set a new feeAdmin, only for feeAdmin
-      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
-      */
-    function _setFeeAdmin(address payable newFeeAdmin) public returns (uint) {
-        // Check caller is feeAdmin
-        if (msg.sender != feeAdmin) {
-            return fail(Error.UNAUTHORIZED, FailureInfo.SET_FEE_ADMIN_OWNER_CHECK);
-        }
-
-        // Save current values for inclusion in log
-        address oldFeeAdmin = feeAdmin;
-
-        // Set market's feeAdmin to newFeeAdmin
-        feeAdmin = newFeeAdmin;
-
-        emit NewFeeAdmin(oldFeeAdmin, newFeeAdmin);
-
-        return uint(Error.NO_ERROR);
-    }
-
-    /**
       * @notice Sets a new feeReceiver for the market
-      * @dev feeAdmin function to set a new feeReceiver, only for feeAdmin
+      * @dev Admin function to set a new feeReceiver
       * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
       */
     function _setFeeReceiver(address payable newFeeReceiver) public returns (uint) {
-        // Check caller is feeAdmin
-        if (msg.sender != feeAdmin) {
+        // Check caller is admin
+        if (msg.sender != momaMaster.admin()) {
             return fail(Error.UNAUTHORIZED, FailureInfo.SET_FEE_RECEIVER_OWNER_CHECK);
         }
 
@@ -1280,7 +1205,7 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
 
     /**
       * @notice accrues interest and sets a new fee factor for the protocol using _setFeeFactorFresh
-      * @dev feeAdmin function to accrue interest and set a new fee factor, only for feeAdmin
+      * @dev Admin function to accrue interest and set a new fee factor
       * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
       */
     function _setFeeFactor(uint newFeeFactorMantissa) external nonReentrant returns (uint) {
@@ -1295,12 +1220,12 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
 
     /**
       * @notice Sets a new fee factor for the protocol (*requires fresh interest accrual)
-      * @dev feeAdmin function to set a new fee factor, only for feeAdmin
+      * @dev Admin function to set a new fee factor
       * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
       */
     function _setFeeFactorFresh(uint newFeeFactorMantissa) internal returns (uint) {
-        // Check caller is feeAdmin
-        if (msg.sender != feeAdmin) {
+        // Check caller is admin
+        if (msg.sender != momaMaster.admin()) {
             return fail(Error.UNAUTHORIZED, FailureInfo.SET_FEE_FACTOR_ADMIN_CHECK);
         }
 
@@ -1323,7 +1248,7 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
     }
 
     /**
-     * @notice Accrues interest and collect fees by transferring to feeReceiver, only for feeAdmin or feeReceiver
+     * @notice Accrues interest and collect fees by transferring to feeReceiver, only for admin or feeReceiver
      * @param collectAmount Amount of fees to collect, -1 means totalFees
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
@@ -1347,7 +1272,7 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
 
     /**
      * @notice Collect fees by transferring to feeReceiver
-     * @dev Requires fresh interest accrual, only for feeAdmin or feeReceiver
+     * @dev Requires fresh interest accrual, only for admin or feeReceiver
      * @param collectAmount Amount of fees to collect, -1 means totalFees
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
@@ -1367,8 +1292,8 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
         // totalFees - collectAmount
         uint totalFeesNew;
 
-        // Check caller is feeAdmin or feeReceiver
-        if (msg.sender != feeAdmin && msg.sender != feeReceiver) {
+        // Check caller is admin or feeReceiver
+        if (msg.sender != momaMaster.admin() && msg.sender != feeReceiver) {
             return fail(Error.UNAUTHORIZED, FailureInfo.COLLECT_FEES_ADMIN_CHECK);
         }
 
@@ -1516,7 +1441,7 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
       */
     function _setReserveFactorFresh(uint newReserveFactorMantissa) internal returns (uint) {
         // Check caller is admin
-        if (msg.sender != admin) {
+        if (msg.sender != momaMaster.admin()) {
             return fail(Error.UNAUTHORIZED, FailureInfo.SET_RESERVE_FACTOR_ADMIN_CHECK);
         }
 
@@ -1626,8 +1551,9 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
         // totalReserves - reduceAmount
         uint totalReservesNew;
 
+        address payable momaMasterAdmin = momaMaster.admin();
         // Check caller is admin
-        if (msg.sender != admin) {
+        if (msg.sender != momaMasterAdmin) {
             return fail(Error.UNAUTHORIZED, FailureInfo.REDUCE_RESERVES_ADMIN_CHECK);
         }
 
@@ -1658,9 +1584,9 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
         totalReserves = totalReservesNew;
 
         // doTransferOut reverts if anything goes wrong, since we can't be sure if side effects occurred.
-        doTransferOut(admin, reduceAmount);
+        doTransferOut(momaMasterAdmin, reduceAmount);
 
-        emit ReservesReduced(admin, reduceAmount, totalReservesNew);
+        emit ReservesReduced(momaMasterAdmin, reduceAmount, totalReservesNew);
 
         return uint(Error.NO_ERROR);
     }
@@ -1693,7 +1619,7 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
         InterestRateModel oldInterestRateModel;
 
         // Check caller is admin
-        if (msg.sender != admin) {
+        if (msg.sender != momaMaster.admin()) {
             return fail(Error.UNAUTHORIZED, FailureInfo.SET_INTEREST_RATE_MODEL_OWNER_CHECK);
         }
 
