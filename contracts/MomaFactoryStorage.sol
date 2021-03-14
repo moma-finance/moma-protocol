@@ -22,6 +22,10 @@ contract MomaFactoryStorage is MomaFactoryProxyStorage {
     address public momaFarming;
     address public farmingDelegate;
 
+    address public timelock;
+    address public momaMaster;
+    address public mToken;
+
     uint public defualtFeeFactorMantissa;
     uint public lendingPoolNum;
 

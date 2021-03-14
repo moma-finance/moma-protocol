@@ -927,6 +927,9 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
             return fail(Error.UNAUTHORIZED, FailureInfo.SUPPORT_MARKET_OWNER_CHECK);
         }
 
+        // Check is mToken
+        require(MomaFactoryInterface(factory).isMToken(address(mToken)) == true, 'not mToken');
+
         if (markets[address(mToken)].isListed) {
             return fail(Error.MARKET_ALREADY_LISTED, FailureInfo.SUPPORT_MARKET_EXISTS);
         }

@@ -2,6 +2,8 @@ pragma solidity ^0.5.16;
 
 import "./ErrorReporter.sol";
 import "./MomaMasterStorage.sol";
+import "./MomaFactoryInterface.sol";
+
 /**
  * @title MomaMasterCore
  * @dev Storage for the MomaMaster is at this address, while execution is delegated to the `momaMasterImplementation`.
@@ -47,6 +49,9 @@ contract MomaPool is MomaPoolAdminStorage, MomaMasterErrorReporter {
             return fail(Error.UNAUTHORIZED, FailureInfo.SET_PENDING_IMPLEMENTATION_OWNER_CHECK);
         }
 
+        // Check is momaMaster
+        require(MomaFactoryInterface(factory).isMomaMaster(newPendingImplementation) == true, 'MomaPool: NOT MOMAMASTER');
+
         address oldPendingImplementation = pendingMomaMasterImplementation;
 
         pendingMomaMasterImplementation = newPendingImplementation;
@@ -66,6 +71,9 @@ contract MomaPool is MomaPoolAdminStorage, MomaMasterErrorReporter {
         if (msg.sender != pendingMomaMasterImplementation || pendingMomaMasterImplementation == address(0)) {
             return fail(Error.UNAUTHORIZED, FailureInfo.ACCEPT_PENDING_IMPLEMENTATION_ADDRESS_CHECK);
         }
+
+        // Check is momaMaster
+        require(MomaFactoryInterface(factory).isMomaMaster(msg.sender) == true, 'MomaPool: NOT MOMAMASTER');
 
         // Save current values for inclusion in log
         address oldImplementation = momaMasterImplementation;
@@ -94,6 +102,9 @@ contract MomaPool is MomaPoolAdminStorage, MomaMasterErrorReporter {
             return fail(Error.UNAUTHORIZED, FailureInfo.SET_PENDING_ADMIN_OWNER_CHECK);
         }
 
+        // Check is timelock
+        require(MomaFactoryInterface(factory).isTimelock(newPendingAdmin) == true, 'MomaPool: NOT TIMELOCK');
+
         // Save current value, if any, for inclusion in log
         address oldPendingAdmin = pendingAdmin;
 
@@ -116,6 +127,9 @@ contract MomaPool is MomaPoolAdminStorage, MomaMasterErrorReporter {
         if (msg.sender != pendingAdmin || msg.sender == address(0)) {
             return fail(Error.UNAUTHORIZED, FailureInfo.ACCEPT_ADMIN_PENDING_ADMIN_CHECK);
         }
+
+        // Check is timelock
+        require(MomaFactoryInterface(factory).isTimelock(msg.sender) == true, 'MomaPool: NOT TIMELOCK');
 
         // Save current values for inclusion in log
         address oldAdmin = admin;

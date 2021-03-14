@@ -55,6 +55,38 @@ contract MomaFactory is MomaFactoryInterface, MomaFactoryStorage {
         return pools[pool].isLending;
     }
 
+    function isTimelock(address b) external view returns (bool) {
+        return isCodeSame(timelock, b);
+    }
+
+    function isMomaMaster(address b) external view returns (bool) {
+        return isCodeSame(momaMaster, b);
+    }
+
+    function isMToken(address b) external view returns (bool) {
+        return isCodeSame(mToken, b);
+    }
+
+    function isCodeSame(address a, address b) public view returns (bool) {
+        return keccak256(at(a)) == keccak256(at(b));
+    }
+
+    function at(address _addr) internal view returns (bytes memory o_code) {
+        assembly {
+            // retrieve the size of the code, this needs assembly
+            let size := extcodesize(_addr)
+            // allocate output byte array - this could also be done without assembly
+            // by using o_code = new bytes(size)
+            o_code := mload(0x40)
+            // new "memory end" including padding
+            mstore(0x40, add(o_code, and(add(add(size, 0x20), 0x1f), not(0x1f))))
+            // store length in memory
+            mstore(o_code, size)
+            // actually retrieve the code, this needs assembly
+            extcodecopy(_addr, add(o_code, 0x20), 0, size)
+        }
+    }
+
 
     /*** pool Functions ***/
     function upgradeLendingPool() external returns (bool) {
@@ -90,6 +122,27 @@ contract MomaFactory is MomaFactoryInterface, MomaFactoryStorage {
         address oldDelegate = farmingDelegate;
         farmingDelegate = newDelegate;
         emit NewFarmingDelegate(oldDelegate, newDelegate);
+    }
+
+    function _setTimelock(address newTimelock) external {
+        require(msg.sender == admin, 'MomaFactory: admin check');
+        address oldTimelock = timelock;
+        timelock = newTimelock;
+        emit NewTimelock(oldTimelock, newTimelock);
+    }
+
+    function _setMomaMaster(address newMomaMaster) external {
+        require(msg.sender == admin, 'MomaFactory: admin check');
+        address oldMomaMaster = momaMaster;
+        momaMaster = newMomaMaster;
+        emit NewMomaMaster(oldMomaMaster, newMomaMaster);
+    }
+
+    function _setMToken(address newMToken) external {
+        require(msg.sender == admin, 'MomaFactory: admin check');
+        address oldMToken = mToken;
+        mToken = newMToken;
+        emit NewMToken(oldMToken, newMToken);
     }
 
     function _setAllowUpgrade(bool allow) external {
