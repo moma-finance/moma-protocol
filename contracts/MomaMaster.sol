@@ -45,9 +45,6 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
     /// @notice Emitted when borrow cap for a mToken is changed
     event NewBorrowCap(MToken indexed mToken, uint newBorrowCap);
 
-    /// @notice Emitted when borrow cap guardian is changed
-    event NewBorrowCapGuardian(address oldBorrowCapGuardian, address newBorrowCapGuardian);
-
     /// @notice Emitted when a new token speed is updated for a market
     event TokenSpeedUpdated(address indexed token, MToken indexed mToken, uint oldSpeed, uint newSpeed);
 
@@ -957,12 +954,12 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
 
     /**
       * @notice Set the given borrow caps for the given mToken markets. Borrowing that brings total borrows to or above borrow cap will revert.
-      * @dev Admin or borrowCapGuardian function to set the borrow caps. A borrow cap of 0 corresponds to unlimited borrowing.
+      * @dev Admin or pauseGuardian function to set the borrow caps. A borrow cap of 0 corresponds to unlimited borrowing.
       * @param mTokens The addresses of the markets (tokens) to change the borrow caps for
       * @param newBorrowCaps The new borrow cap values in underlying to be set. A value of 0 corresponds to unlimited borrowing.
       */
     function _setMarketBorrowCaps(MToken[] calldata mTokens, uint[] calldata newBorrowCaps) external {
-    	require(msg.sender == admin || msg.sender == borrowCapGuardian, "only admin or borrow cap guardian can set borrow caps"); 
+    	require(msg.sender == admin || msg.sender == pauseGuardian, "only admin or pauseGuardian can set borrow caps"); 
 
         uint numMarkets = mTokens.length;
         uint numBorrowCaps = newBorrowCaps.length;
@@ -973,23 +970,6 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
             borrowCaps[address(mTokens[i])] = newBorrowCaps[i];
             emit NewBorrowCap(mTokens[i], newBorrowCaps[i]);
         }
-    }
-
-    /**
-     * @notice Admin function to change the Borrow Cap Guardian
-     * @param newBorrowCapGuardian The address of the new Borrow Cap Guardian
-     */
-    function _setBorrowCapGuardian(address newBorrowCapGuardian) external {
-        require(msg.sender == admin, "only admin can set borrow cap guardian");
-
-        // Save current value for inclusion in log
-        address oldBorrowCapGuardian = borrowCapGuardian;
-
-        // Store borrowCapGuardian with value newBorrowCapGuardian
-        borrowCapGuardian = newBorrowCapGuardian;
-
-        // Emit NewBorrowCapGuardian(OldBorrowCapGuardian, NewBorrowCapGuardian)
-        emit NewBorrowCapGuardian(oldBorrowCapGuardian, newBorrowCapGuardian);
     }
 
     /**
