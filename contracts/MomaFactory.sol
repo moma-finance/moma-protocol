@@ -64,7 +64,7 @@ contract MomaFactory is MomaFactoryInterface, MomaFactoryStorage {
     }
 
     function isMToken(address b) external view returns (bool) {
-        return isCodeSame(mToken, b);
+        return isCodeSame(mErc20, b) || isCodeSame(mEther, b);
     }
 
     function isCodeSame(address a, address b) public view returns (bool) {
@@ -138,11 +138,18 @@ contract MomaFactory is MomaFactoryInterface, MomaFactoryStorage {
         emit NewMomaMaster(oldMomaMaster, newMomaMaster);
     }
 
-    function _setMToken(address newMToken) external {
+    function _setMEther(address newMEther) external {
         require(msg.sender == admin, 'MomaFactory: admin check');
-        address oldMToken = mToken;
-        mToken = newMToken;
-        emit NewMToken(oldMToken, newMToken);
+        address oldEther = mEther;
+        mEther = newMEther;
+        emit NewMEther(oldEther, newMEther);
+    }
+
+    function _setMErc20(address newMErc20) external {
+        require(msg.sender == admin, 'MomaFactory: admin check');
+        address oldMErc20 = mErc20;
+        mErc20 = newMErc20;
+        emit NewMErc20(oldMErc20, newMErc20);
     }
 
     function _setAllowUpgrade(bool allow) external {
