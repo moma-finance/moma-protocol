@@ -8,13 +8,16 @@ import "./MomaFactoryProxy.sol";
 
 contract MomaFactory is MomaFactoryInterface, MomaFactoryStorage {
 
+    bool public constant isMomaFactory = true;
+    uint public constant feeFactorMaxMantissa = 1e18;
+
     function createPool() external returns (address pool) {
         bytes memory bytecode = type(MomaPool).creationCode;
         bytes32 salt = keccak256(abi.encodePacked(msg.sender));
         assembly {
             pool := create2(0, add(bytecode, 32), mload(bytecode), salt)
         }
-        IMomaPool(pool).initialize(msg.sender);
+        IMomaPool(pool).initialize(msg.sender, momaMaster);
         PoolInfo storage info = pools[pool];
         info.creator = msg.sender;
         info.poolFeeAdmin = feeAdmin;
@@ -61,6 +64,14 @@ contract MomaFactory is MomaFactoryInterface, MomaFactoryStorage {
 
     function isMomaMaster(address b) external view returns (bool) {
         return isCodeSame(momaMaster, b);
+    }
+
+    function isMEtherImplementation(address b) external view returns (bool) {
+        return isCodeSame(mEtherImplementation, b);
+    }
+
+    function isMErc20Implementation(address b) external view returns (bool) {
+        return isCodeSame(mErc20Implementation, b);
     }
 
     function isMToken(address b) external view returns (bool) {
@@ -112,6 +123,7 @@ contract MomaFactory is MomaFactoryInterface, MomaFactoryStorage {
 
     function _setMomaFarming(address newMomaFarming) external {
         require(msg.sender == admin, 'MomaFactory: admin check');
+        require(IMomaFarming(newMomaFarming).isMomaFarming() == true, 'MomaFactory: newMomaFarming check');
         address oldMomaFarming = momaFarming;
         momaFarming = newMomaFarming;
         emit NewMomaFarming(oldMomaFarming, newMomaFarming);
@@ -119,6 +131,7 @@ contract MomaFactory is MomaFactoryInterface, MomaFactoryStorage {
 
     function _setFarmingDelegate(address newDelegate) external {
         require(msg.sender == admin, 'MomaFactory: admin check');
+        require(IFarmingDelegate(newDelegate).isFarmingDelegate() == true, 'MomaFactory: newDelegate check');
         address oldDelegate = farmingDelegate;
         farmingDelegate = newDelegate;
         emit NewFarmingDelegate(oldDelegate, newDelegate);
@@ -133,6 +146,7 @@ contract MomaFactory is MomaFactoryInterface, MomaFactoryStorage {
 
     function _setMomaMaster(address newMomaMaster) external {
         require(msg.sender == admin, 'MomaFactory: admin check');
+        require(MomaMasterInterface(newMomaMaster).isMomaMaster() == true, 'MomaFactory: newMomaMaster check');
         address oldMomaMaster = momaMaster;
         momaMaster = newMomaMaster;
         emit NewMomaMaster(oldMomaMaster, newMomaMaster);
@@ -140,6 +154,7 @@ contract MomaFactory is MomaFactoryInterface, MomaFactoryStorage {
 
     function _setMEther(address newMEther) external {
         require(msg.sender == admin, 'MomaFactory: admin check');
+        require(MTokenInterface(newMEther).isMToken() == true, 'MomaFactory: newMEther check');
         address oldEther = mEther;
         mEther = newMEther;
         emit NewMEther(oldEther, newMEther);
@@ -147,9 +162,26 @@ contract MomaFactory is MomaFactoryInterface, MomaFactoryStorage {
 
     function _setMErc20(address newMErc20) external {
         require(msg.sender == admin, 'MomaFactory: admin check');
+        require(MTokenInterface(newMErc20).isMToken() == true, 'MomaFactory: newMErc20 check');
         address oldMErc20 = mErc20;
         mErc20 = newMErc20;
         emit NewMErc20(oldMErc20, newMErc20);
+    }
+
+    function _setMEtherImplementation(address newMEtherImplementation) external {
+        require(msg.sender == admin, 'MomaFactory: admin check');
+        require(MTokenInterface(newMEtherImplementation).isMToken() == true, 'MomaFactory: newMEtherImplementation check');
+        address oldMEtherImplementation = mEtherImplementation;
+        mEtherImplementation = newMEtherImplementation;
+        emit NewMEtherImplementation(oldMEtherImplementation, newMEtherImplementation);
+    }
+
+    function _setMErc20Implementation(address newMErc20Implementation) external {
+        require(msg.sender == admin, 'MomaFactory: admin check');
+        require(MTokenInterface(newMErc20Implementation).isMToken() == true, 'MomaFactory: newMErc20Implementation check');
+        address oldMErc20Implementation = mErc20Implementation;
+        mErc20Implementation = newMErc20Implementation;
+        emit NewMErc20Implementation(oldMErc20Implementation, newMErc20Implementation);
     }
 
     function _setAllowUpgrade(bool allow) external {
@@ -237,5 +269,9 @@ contract MomaFactory is MomaFactoryInterface, MomaFactoryStorage {
 
 
 interface IMomaPool {
-    function initialize(address admin_) external;
+    function initialize(address admin_, address implementation_) external;
+}
+
+interface IFarmingDelegate {
+    function isFarmingDelegate() external view returns (bool);
 }

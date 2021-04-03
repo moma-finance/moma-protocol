@@ -4,14 +4,13 @@ import "./MTokenInterfaces.sol";
 import "./MomaFactoryInterface.sol";
 
 /**
- * @title Moma's MErc20Delegator Contract
- * @notice MTokens which wrap an EIP-20 underlying and delegate to an implementation
+ * @title Moma's MEtherDelegator Contract
+ * @notice Ether MToken which delegate to an implementation
  * @author Moma
  */
-contract MErc20Delegator is MTokenStorage, MErc20Storage, MDelegatorInterface {
+contract MEtherDelegator is MTokenStorage, MDelegatorInterface {
     /**
      * @notice Construct a new money market
-     * @param underlying_ The address of the underlying asset
      * @param momaMaster_ The address of the momaMaster
      * @param initialExchangeRateMantissa_ The initial exchange rate, scaled by 1e18
      * @param name_ ERC-20 name of this token
@@ -20,8 +19,7 @@ contract MErc20Delegator is MTokenStorage, MErc20Storage, MDelegatorInterface {
      * @param becomeImplementationData The encoded args for becomeImplementation
      * @param feeReceiver_ Address of the free receiver of this token
      */
-    constructor(address underlying_,
-                MomaMasterInterface momaMaster_,
+    constructor(MomaMasterInterface momaMaster_,
                 uint initialExchangeRateMantissa_,
                 string memory name_,
                 string memory symbol_,
@@ -29,12 +27,11 @@ contract MErc20Delegator is MTokenStorage, MErc20Storage, MDelegatorInterface {
                 bytes memory becomeImplementationData,
                 address payable feeReceiver_) public {
         // Get the address of the implementation the contract delegates to from factory
-        address implementation_ = MomaFactoryInterface(momaMaster_.factory()).mErc20Implementation();
-        require(implementation_ != address(0), 'MErc20Delegator: ZERO FORBIDDEN');
+        address implementation_ = MomaFactoryInterface(momaMaster_.factory()).mEtherImplementation();
+        require(implementation_ != address(0), 'MEtherDelegator: ZERO FORBIDDEN');
 
         // First delegate gets to initialize the delegator (i.e. storage contract)
-        delegateTo(implementation_, abi.encodeWithSignature("initialize(address,address,uint256,string,string,uint8,address)",
-                                                            underlying_,
+        delegateTo(implementation_, abi.encodeWithSignature("initialize(address,uint256,string,string,uint8,address)",
                                                             momaMaster_,
                                                             initialExchangeRateMantissa_,
                                                             name_,
@@ -54,10 +51,10 @@ contract MErc20Delegator is MTokenStorage, MErc20Storage, MDelegatorInterface {
      * @param becomeImplementationData The encoded bytes data to be passed to _becomeImplementation
      */
     function _setImplementation(address implementation_, bool allowResign, bytes memory becomeImplementationData) public {
-        require(msg.sender == momaMaster.admin(), "MErc20Delegator::_setImplementation: Caller must be admin");
+        require(msg.sender == momaMaster.admin(), "MEtherDelegator::_setImplementation: Caller must be admin");
 
-        // Check is mErc20
-        require(MomaFactoryInterface(momaMaster.factory()).isMErc20Implementation(implementation_) == true, 'MErc20Delegator: not mERC20Implementation');
+        // Check is mEther
+        require(MomaFactoryInterface(momaMaster.factory()).isMEtherImplementation(implementation_) == true, 'MEtherDelegator: not mEtherImplementation');
 
         if (allowResign) {
             delegateToImplementation(abi.encodeWithSignature("_resignImplementation()"));
@@ -177,8 +174,6 @@ contract MErc20Delegator is MTokenStorage, MErc20Storage, MDelegatorInterface {
      * @dev It returns to the external caller whatever the implementation returns or forwards reverts
      */
     function () external payable {
-        require(msg.value == 0,"MErc20Delegator:fallback: cannot send value to fallback");
-
         // delegate all other functions to current implementation
         (bool success, ) = implementation.delegatecall(msg.data);
 

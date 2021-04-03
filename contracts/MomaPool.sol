@@ -37,9 +37,11 @@ contract MomaPool is MomaPoolAdminStorage, MomaMasterErrorReporter {
     }
 
     // called once by the factory at time of deployment
-    function initialize(address admin_) external {
+    function initialize(address admin_, address implementation_) external {
         require(msg.sender == factory && admin == address(0), 'MomaPool: FORBIDDEN'); // sufficient check
+        require(implementation_ != address(0), 'MomaPool: ZERO FORBIDDEN');
         admin = admin_;
+        momaMasterImplementation = implementation_;
     }
 
     /*** Admin Functions ***/

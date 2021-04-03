@@ -12,6 +12,8 @@ contract MomaFarming is ExponentialNoError {
     Moma public moma;
     MomaFactoryInterface public factory;
 
+    bool public constant isMomaFarming = true;
+
     /// @notice The initial moma index for a market
     uint public constant momaInitialIndex = 1e36;
 

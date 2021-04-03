@@ -35,6 +35,8 @@ contract FarmingDelegate is MomaMasterV1Storage, MomaMasterErrorReporter, Expone
     /// @notice The initial moma index for a market
     uint224 public constant momaInitialIndex = 1e36;
 
+    bool public constant isFarmingDelegate = true;
+
 
     /*** Tokens Farming Internal Functions ***/
 

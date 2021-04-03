@@ -134,14 +134,15 @@ contract MTokenStorage {
      * @notice Mapping of account addresses to outstanding borrow balances
      */
     mapping(address => BorrowSnapshot) internal accountBorrows;
-}
 
-contract MTokenInterface is MTokenStorage {
     /**
      * @notice Indicator that this is a MToken contract (for inspection)
      */
     bool public constant isMToken = true;
+}
 
+
+contract MTokenInterface is MTokenStorage {
 
     /*** Market Events ***/
 

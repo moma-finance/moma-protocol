@@ -1502,4 +1502,5 @@ interface IMomaFarming {
     function distributeSupplierMoma(address mToken, address supplier) external;
     function distributeBorrowerMoma(address mToken, address borrower, uint marketBorrowIndex) external;
     function upgradeLendingPool(address pool) external;
+    function isMomaFarming() external view returns (bool);
 }

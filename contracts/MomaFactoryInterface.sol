@@ -13,6 +13,8 @@ interface MomaFactoryInterface {
     event NewMomaMaster(address oldMomaMaster, address newMomaMaster);
     event NewMEther(address oldMEther, address newMEther);
     event NewMErc20(address oldMErc20, address newMErc20);
+    event NewMErc20Implementation(address oldMErc20Implementation, address newMErc20Implementation);
+    event NewMEtherImplementation(address oldMEtherImplementation, address newMEtherImplementation);
     event NewLendingPool(address pool);
     event NewPoolFeeAdmin(address pool, address oldPoolFeeAdmin, address newPoolFeeAdmin);
     event NewPoolFeeReceiver(address pool, address oldPoolFeeAdmin, address newPoolFeeAdmin);
@@ -22,6 +24,8 @@ interface MomaFactoryInterface {
     function isMomaFactory() external view returns (bool);
     function momaFarming() external view returns (address);
     function farmingDelegate() external view returns (address);
+    function mEtherImplementation() external view returns (address);
+    function mErc20Implementation() external view returns (address);
     function admin() external view returns (address);
     function feeAdmin() external view returns (address);
     function defualtFeeReceiver() external view returns (address);
@@ -41,6 +45,8 @@ interface MomaFactoryInterface {
     function isLendingPool(address pool) external view returns (bool);
     function isTimelock(address b) external view returns (bool);
     function isMomaMaster(address b) external view returns (bool);
+    function isMEtherImplementation(address b) external view returns (bool);
+    function isMErc20Implementation(address b) external view returns (bool);
     function isMToken(address b) external view returns (bool);
     function isCodeSame(address a, address b) external view returns (bool);
 

@@ -3,10 +3,6 @@ pragma solidity ^0.5.16;
 
 contract MomaFactoryProxyStorage {
 
-    uint public constant feeFactorMaxMantissa = 1e18;
-    bool public constant isMomaFactory = true;
-    bool public allowUpgrade;
-
     address public admin;
     address public pendingAdmin;
     address public momaFactoryImplementation;
@@ -26,9 +22,12 @@ contract MomaFactoryStorage is MomaFactoryProxyStorage {
     address public momaMaster;
     address public mEther;
     address public mErc20;
+    address public mEtherImplementation;
+    address public mErc20Implementation;
 
     uint public defualtFeeFactorMantissa;
     uint public lendingPoolNum;
+    bool public allowUpgrade;
 
     struct PoolInfo {
         address creator;
