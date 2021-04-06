@@ -681,6 +681,8 @@ contract MomaFarming is ExponentialNoError {
 
             // add this market to momaMarkets if first set
             if (!state.isMomaMarket) {
+                (bool isListed, ) = MomaMasterV1Storage(pool).markets(address(mToken));
+                require(isListed == true, "market is not listed");
                 state.isMomaMarket = true;
                 momaMarkets[pool].push(mToken);
                 emit NewMomaMarket(pool, mToken);
