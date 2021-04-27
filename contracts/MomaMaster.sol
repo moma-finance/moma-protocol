@@ -927,6 +927,10 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
             return fail(Error.UNAUTHORIZED, FailureInfo.SUPPORT_MARKET_OWNER_CHECK);
         }
 
+        if (isLendingPool) {
+            require(address(mToken.interestRateModel()) != address(0), "mToken not set interestRateModel");
+        }
+
         // Check is mToken
         require(MomaFactoryInterface(factory).isMToken(address(mToken)) == true, 'not mToken');
 

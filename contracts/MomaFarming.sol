@@ -477,6 +477,7 @@ contract MomaFarming is ExponentialNoError {
      * @return The mama market speed
      */
     function getMarketSpeed(address pool, address mToken) public view returns (uint) {
+        if (momaTotalWeight == 0) return 0;
         return div_(mul_(momaSpeed, marketStates[pool][mToken].weight), momaTotalWeight);
     }
 
@@ -665,7 +666,7 @@ contract MomaFarming is ExponentialNoError {
     function _setMarketsWeight(address payable pool, MToken[] memory mTokens, uint[] memory newWeights) public {
         require(msg.sender == admin, 'MomaFarming: admin check');
         require(factory.isMomaPool(pool), 'MomaFarming: not moma pool');
-        // param check?
+        require(mTokens.length == newWeights.length, "MomaFarming: param length dismatch");
 
         // Update state for all MOMA markets of all pools
         updateAllMomaMarkets();
