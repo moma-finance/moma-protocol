@@ -28,6 +28,10 @@ contract MomaFactory is MomaFactoryInterface, MomaFactoryStorage {
     }
 
     /*** view Functions ***/
+    function getAllPools() public view returns (address[] memory) {
+        return allPools;
+    }
+
     function allPoolsLength() external view returns (uint) {
         return allPools.length;
     }
@@ -41,7 +45,7 @@ contract MomaFactory is MomaFactoryInterface, MomaFactoryStorage {
     }
 
     function getMomaFeeFactorMantissa(address pool, address underlying) external view returns (uint) {
-        if (pools[pool].noFee) {
+        if (pools[pool].noFee || noFeeTokens[underlying]) {
             return 0;
         } else if (tokenFeeFactors[underlying] != 0) {
             return tokenFeeFactors[underlying];
@@ -219,6 +223,13 @@ contract MomaFactory is MomaFactoryInterface, MomaFactoryStorage {
         emit NewDefualtFeeFactor(oldFeeFactor, _newFeeFactor);
     }
 
+    function setNoFeeTokenStatus(address token, bool _noFee) external {
+        require(msg.sender == feeAdmin, 'MomaFactory: feeAdmin check');
+        bool oldNoFeeTokenStatus = noFeeTokens[token];
+        noFeeTokens[token] = _noFee;
+        emit NewNoFeeTokenStatus(token, oldNoFeeTokenStatus, _noFee);
+    }
+
     function setTokenFeeFactor(address token, uint _newFeeFactor) external {
         require(msg.sender == feeAdmin, 'MomaFactory: feeAdmin check');
         require(_newFeeFactor <= feeFactorMaxMantissa, 'MomaFactory: newFeeFactor bound check');
@@ -259,11 +270,6 @@ contract MomaFactory is MomaFactoryInterface, MomaFactoryStorage {
         bool oldPoolFeeStatus = info.noFee;
         info.noFee = _noFee;
         emit NewPoolFeeStatus(pool, oldPoolFeeStatus, _noFee);
-    }
-
-
-    function getBlockNumber() public view returns (uint) {
-        return block.number;
     }
 }
 

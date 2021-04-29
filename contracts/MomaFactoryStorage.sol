@@ -39,6 +39,7 @@ contract MomaFactoryStorage is MomaFactoryProxyStorage {
         bool allowUpgrade;
     }
 
+    mapping(address => bool) public noFeeTokens;
     mapping(address => uint) public tokenFeeFactors;
     mapping(address => PoolInfo) public pools;
     address[] public allPools;

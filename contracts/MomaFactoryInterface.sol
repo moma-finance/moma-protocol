@@ -8,6 +8,7 @@ interface MomaFactoryInterface {
     event NewFeeAdmin(address oldFeeAdmin, address newFeeAdmin);
     event NewDefualtFeeReceiver(address oldFeeReceiver, address newFeeReceiver);
     event NewDefualtFeeFactor(uint oldFeeFactor, uint newFeeFactor);
+    event NewNoFeeTokenStatus(address token, bool oldNoFeeTokenStatus, bool newNoFeeTokenStatus);
     event NewTokenFeeFactor(address token, uint oldFeeFactor, uint newFeeFactor);
     event NewTimelock(address oldTimelock, address newTimelock);
     event NewMomaMaster(address oldMomaMaster, address newMomaMaster);
@@ -17,7 +18,7 @@ interface MomaFactoryInterface {
     event NewMEtherImplementation(address oldMEtherImplementation, address newMEtherImplementation);
     event NewLendingPool(address pool);
     event NewPoolFeeAdmin(address pool, address oldPoolFeeAdmin, address newPoolFeeAdmin);
-    event NewPoolFeeReceiver(address pool, address oldPoolFeeAdmin, address newPoolFeeAdmin);
+    event NewPoolFeeReceiver(address pool, address oldPoolFeeReceiver, address newPoolFeeReceiver);
     event NewPoolFeeFactor(address pool, uint oldPoolFeeFactor, uint newPoolFeeFactor);
     event NewPoolFeeStatus(address pool, bool oldPoolFeeStatus, bool newPoolFeeStatus);
 
