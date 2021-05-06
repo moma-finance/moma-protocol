@@ -1,7 +1,7 @@
 pragma solidity ^0.5.16;
 
-contract FalseMarkerMethodComptroller {
-    bool public constant isComptroller = false;
+contract FalseMarkerMethodMomaMaster {
+    bool public constant isMomaMaster = false;
 }
 
 contract FalseMarkerMethodInterestRateModel {

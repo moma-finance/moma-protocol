@@ -6,30 +6,30 @@ const {
 } = require('./Utils/Ethereum');
 
 const {
-  makeCToken,
+  makeMToken,
   makePriceOracle,
-} = require('./Utils/Compound');
+} = require('./Utils/Moma');
 
 describe('PriceOracleProxy', () => {
   let root, accounts;
-  let oracle, backingOracle, cEth, cUsdc, cSai, cDai, cUsdt, cOther;
+  let oracle, backingOracle, mEth, cUsdc, cSai, cDai, cUsdt, cOther;
   let daiOracleKey = address(2);
 
   beforeEach(async () => {
     [root, ...accounts] = saddle.accounts;
-    cEth = await makeCToken({kind: "cether", comptrollerOpts: {kind: "v1-no-proxy"}, supportMarket: true});
-    cUsdc = await makeCToken({comptroller: cEth.comptroller, supportMarket: true});
-    cSai = await makeCToken({comptroller: cEth.comptroller, supportMarket: true});
-    cDai = await makeCToken({comptroller: cEth.comptroller, supportMarket: true});
-    cUsdt = await makeCToken({comptroller: cEth.comptroller, supportMarket: true});
-    cOther = await makeCToken({comptroller: cEth.comptroller, supportMarket: true});
+    mEth = await makeMToken({kind: "mether"});
+    cUsdc = await makeMToken({momaPool: mEth.momaPool});
+    cSai = await makeMToken({momaPool: mEth.momaPool});
+    cDai = await makeMToken({momaPool: mEth.momaPool});
+    cUsdt = await makeMToken({momaPool: mEth.momaPool});
+    cOther = await makeMToken({momaPool: mEth.momaPool});
 
     backingOracle = await makePriceOracle();
     oracle = await deploy('PriceOracleProxy',
       [
         root,
         backingOracle._address,
-        cEth._address,
+        mEth._address,
         cUsdc._address,
         cSai._address,
         cDai._address,
@@ -51,7 +51,7 @@ describe('PriceOracleProxy', () => {
 
     it("sets address of cEth", async () => {
       let configuredCEther = await call(oracle, "cEthAddress");
-      expect(configuredCEther).toEqual(cEth._address);
+      expect(configuredCEther).toEqual(mEth._address);
     });
 
     it("sets address of cUSDC", async () => {
@@ -96,7 +96,7 @@ describe('PriceOracleProxy', () => {
     };
 
     it("always returns 1e18 for cEth", async () => {
-      await readAndVerifyProxyPrice(cEth, 1);
+      await readAndVerifyProxyPrice(mEth, 1);
     });
 
     it("uses address(1) for USDC and address(2) for cdai", async () => {
@@ -116,7 +116,7 @@ describe('PriceOracleProxy', () => {
     });
 
     it("returns 0 for token without a price", async () => {
-      let unlistedToken = await makeCToken({comptroller: cEth.comptroller});
+      let unlistedToken = await makeMToken({momaPool: mEth.momaPool});
 
       await readAndVerifyProxyPrice(unlistedToken, 0);
     });

@@ -95,6 +95,11 @@ async function freezeTime(seconds) {
   return rpc({ method: 'evm_mine' });
 }
 
+async function getBlock(blockNumber, full = true) {
+  let { result } =  await rpc({ method: 'eth_getBlockByNumber', params: [blockNumber, full] });
+  return result;
+}
+
 async function advanceBlocks(blocks) {
   let { result: num } = await rpc({ method: 'eth_blockNumber' });
   await rpc({ method: 'evm_mineBlockNumber', params: [blocks + parseInt(num)] });
@@ -142,6 +147,7 @@ module.exports = {
   unlockedAccounts,
   unlockedAccount,
 
+  getBlock,
   advanceBlocks,
   blockNumber,
   freezeTime,

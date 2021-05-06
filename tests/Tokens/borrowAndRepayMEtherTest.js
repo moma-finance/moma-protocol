@@ -1,4 +1,5 @@
 const {
+  etherGasCost,
   etherUnsigned,
   etherMantissa,
   UInt256Max
@@ -6,14 +7,16 @@ const {
 
 const {
   makeMToken,
-  balanceOf,
   borrowSnapshot,
   totalBorrows,
   fastForward,
-  setBalance,
-  preApprove,
-  pretendBorrow
+  pretendBorrow,
+  setEtherBalance,
+  getBalances,
+  adjustBalances
 } = require('../Utils/Moma');
+
+const BigNumber = require('bignumber.js');
 
 const borrowAmount = etherUnsigned(10e3);
 const repayAmount = etherUnsigned(10e2);
@@ -22,18 +25,17 @@ async function preBorrow(mToken, borrower, borrowAmount) {
   await send(mToken.momaPool, 'setBorrowAllowed', [true]);
   await send(mToken.momaPool, 'setBorrowVerify', [true]);
   await send(mToken.interestRateModel, 'setFailBorrowRate', [false]);
-  await send(mToken.underlying, 'harnessSetBalance', [mToken._address, borrowAmount]);
   await send(mToken, 'harnessSetFailTransferToAddress', [borrower, false]);
   await send(mToken, 'harnessSetAccountBorrows', [borrower, 0, 0]);
   await send(mToken, 'harnessSetTotalBorrows', [0]);
+  await setEtherBalance(mToken, borrowAmount);
 }
 
 async function borrowFresh(mToken, borrower, borrowAmount) {
-  return send(mToken, 'harnessBorrowFresh', [borrower, borrowAmount]);
+  return send(mToken, 'harnessBorrowFresh', [borrower, borrowAmount], {from: borrower});
 }
 
 async function borrow(mToken, borrower, borrowAmount, opts = {}) {
-  // make sure to have a block delta so we accrue interest
   await send(mToken, 'harnessFastForward', [1]);
   return send(mToken, 'borrow', [borrowAmount], {from: borrower});
 }
@@ -43,34 +45,30 @@ async function preRepay(mToken, benefactor, borrower, repayAmount) {
   await send(mToken.momaPool, 'setRepayBorrowAllowed', [true]);
   await send(mToken.momaPool, 'setRepayBorrowVerify', [true]);
   await send(mToken.interestRateModel, 'setFailBorrowRate', [false]);
-  await send(mToken.underlying, 'harnessSetFailTransferFromAddress', [benefactor, false]);
-  await send(mToken.underlying, 'harnessSetFailTransferFromAddress', [borrower, false]);
   await pretendBorrow(mToken, borrower, 1, 1, repayAmount);
-  await preApprove(mToken, benefactor, repayAmount);
-  await preApprove(mToken, borrower, repayAmount);
 }
 
 async function repayBorrowFresh(mToken, payer, borrower, repayAmount) {
-  return send(mToken, 'harnessRepayBorrowFresh', [payer, borrower, repayAmount], {from: payer});
+  return send(mToken, 'harnessRepayBorrowFresh', [payer, borrower, repayAmount], {from: payer, value: repayAmount});
 }
 
 async function repayBorrow(mToken, borrower, repayAmount) {
-  // make sure to have a block delta so we accrue interest
   await send(mToken, 'harnessFastForward', [1]);
-  return send(mToken, 'repayBorrow', [repayAmount], {from: borrower});
+  return send(mToken, 'repayBorrow', [], {from: borrower, value: repayAmount});
 }
 
 async function repayBorrowBehalf(mToken, payer, borrower, repayAmount) {
-  // make sure to have a block delta so we accrue interest
   await send(mToken, 'harnessFastForward', [1]);
-  return send(mToken, 'repayBorrowBehalf', [borrower, repayAmount], {from: payer});
+  return send(mToken, 'repayBorrowBehalf', [borrower], {from: payer, value: repayAmount});
 }
 
-describe('#MErc20/borrowAndRepay', function () {
+describe('#MEther/borrowAndRepay', function () {
   let mToken, root, borrower, benefactor, accounts;
   beforeEach(async () => {
     [root, borrower, benefactor, ...accounts] = saddle.accounts;
-    mToken = await makeMToken({implementation: 'MErc20DelegateHarness', setInterestRateModel: true, boolMomaMaster: true});
+    // mToken = await makeMToken({kind: 'mether', setInterestRateModel: true, boolMomaMaster: true});
+    mToken = await makeMToken({kind: 'mether', contract: 'MEtherDelegator', implementation: 'MEtherDelegateHarness', 
+                               setInterestRateModel: true, boolMomaMaster: true});
   });
 
   describe('borrowFresh', () => {
@@ -95,7 +93,7 @@ describe('#MErc20/borrowAndRepay', function () {
       await expect(await borrowFresh(mToken, borrower, borrowAmount)).toSucceed();
     });
 
-    it("fails if error if protocol has less than borrowAmount of underlying", async () => {
+    it("fails if protocol has less than borrowAmount of underlying", async () => {
       expect(await borrowFresh(mToken, borrower, borrowAmount.plus(1))).toHaveTokenFailure('TOKEN_INSUFFICIENT_CASH', 'BORROW_CASH_NOT_AVAILABLE');
     });
 
@@ -124,20 +122,18 @@ describe('#MErc20/borrowAndRepay', function () {
       await expect(borrowFresh(mToken, borrower, borrowAmount)).rejects.toRevert("revert borrowVerify rejected borrow");
     });
 
-    it("transfers the underlying cash, tokens, and emits Transfer, Borrow events", async () => {
-      const beforeProtocolCash = await balanceOf(mToken.underlying, mToken._address);
+    it("transfers the underlying cash, tokens, and emits Borrow event", async () => {
+      const beforeBalances = await getBalances([mToken], [borrower]);
       const beforeProtocolBorrows = await totalBorrows(mToken);
-      const beforeAccountCash = await balanceOf(mToken.underlying, borrower);
       const result = await borrowFresh(mToken, borrower, borrowAmount);
+      const afterBalances = await getBalances([mToken], [borrower]);
       expect(result).toSucceed();
-      expect(await balanceOf(mToken.underlying, borrower)).toEqualNumber(beforeAccountCash.plus(borrowAmount));
-      expect(await balanceOf(mToken.underlying, mToken._address)).toEqualNumber(beforeProtocolCash.minus(borrowAmount));
-      expect(await totalBorrows(mToken)).toEqualNumber(beforeProtocolBorrows.plus(borrowAmount));
-      expect(result).toHaveLog('Transfer', {
-        from: mToken._address,
-        to: borrower,
-        amount: borrowAmount.toString()
-      });
+      expect(afterBalances).toEqual(await adjustBalances(beforeBalances, [
+        [mToken, 'eth', -borrowAmount],
+        [mToken, 'borrows', borrowAmount],
+        [mToken, borrower, 'eth', borrowAmount.minus(await etherGasCost(result))],
+        [mToken, borrower, 'borrows', borrowAmount]
+      ]));
       expect(result).toHaveLog('Borrow', {
         borrower: borrower,
         borrowAmount: borrowAmount.toString(),
@@ -162,6 +158,7 @@ describe('#MErc20/borrowAndRepay', function () {
 
     it("emits a borrow failure if interest accrual fails", async () => {
       await send(mToken.interestRateModel, 'setFailBorrowRate', [true]);
+      await send(mToken, 'harnessFastForward', [1]);
       await expect(borrow(mToken, borrower, borrowAmount)).rejects.toRevert("revert INTEREST_RATE_MODEL_ERROR");
     });
 
@@ -170,20 +167,28 @@ describe('#MErc20/borrowAndRepay', function () {
     });
 
     it("returns success from borrowFresh and transfers the correct amount", async () => {
-      const beforeAccountCash = await balanceOf(mToken.underlying, borrower);
+      const beforeBalances = await getBalances([mToken], [borrower]);
       await fastForward(mToken);
-      expect(await borrow(mToken, borrower, borrowAmount)).toSucceed();
-      expect(await balanceOf(mToken.underlying, borrower)).toEqualNumber(beforeAccountCash.plus(borrowAmount));
+      const result = await borrow(mToken, borrower, borrowAmount);
+      const afterBalances = await getBalances([mToken], [borrower]);
+      expect(result).toSucceed();
+      expect(afterBalances).toEqual(await adjustBalances(beforeBalances, [
+        [mToken, 'eth', -borrowAmount],
+        [mToken, 'borrows', borrowAmount],
+        [mToken, borrower, 'eth', borrowAmount.minus(await etherGasCost(result))],
+        [mToken, borrower, 'borrows', borrowAmount]
+      ]));
     });
   });
 
   describe('repayBorrowFresh', () => {
-    [true, false].forEach((benefactorIsPayer) => {
+    [true, false].forEach(async (benefactorPaying) => {
       let payer;
-      const label = benefactorIsPayer ? "benefactor paying" : "borrower paying";
+      const label = benefactorPaying ? "benefactor paying" : "borrower paying";
       describe(label, () => {
         beforeEach(async () => {
-          payer = benefactorIsPayer ? benefactor : borrower;
+          payer = benefactorPaying ? benefactor : borrower;
+
           await preRepay(mToken, payer, borrower, repayAmount);
         });
 
@@ -197,31 +202,23 @@ describe('#MErc20/borrowAndRepay', function () {
           expect(await repayBorrowFresh(mToken, payer, borrower, repayAmount)).toHaveTokenFailure('MARKET_NOT_FRESH', 'REPAY_BORROW_FRESHNESS_CHECK');
         });
 
-        it("fails if insufficient approval", async() => {
-          await preApprove(mToken, payer, 1);
-          await expect(repayBorrowFresh(mToken, payer, borrower, repayAmount)).rejects.toRevert('revert Insufficient allowance');
-        });
-
-        it("fails if insufficient balance", async() => {
-          await setBalance(mToken.underlying, payer, 1);
-          await expect(repayBorrowFresh(mToken, payer, borrower, repayAmount)).rejects.toRevert('revert Insufficient balance');
-        });
-
-
         it("returns an error if calculating account new account borrow balance fails", async () => {
           await pretendBorrow(mToken, borrower, 1, 1, 1);
-          await expect(repayBorrowFresh(mToken, payer, borrower, repayAmount)).rejects.toRevert("revert REPAY_BORROW_NEW_ACCOUNT_BORROW_BALANCE_CALCULATION_FAILED");
+          await expect(repayBorrowFresh(mToken, payer, borrower, repayAmount)).rejects.toRevert('revert REPAY_BORROW_NEW_ACCOUNT_BORROW_BALANCE_CALCULATION_FAILED');
         });
 
         it("returns an error if calculation of new total borrow balance fails", async () => {
           await send(mToken, 'harnessSetTotalBorrows', [1]);
-          await expect(repayBorrowFresh(mToken, payer, borrower, repayAmount)).rejects.toRevert("revert REPAY_BORROW_NEW_TOTAL_BALANCE_CALCULATION_FAILED");
+          await expect(repayBorrowFresh(mToken, payer, borrower, repayAmount)).rejects.toRevert('revert REPAY_BORROW_NEW_TOTAL_BALANCE_CALCULATION_FAILED');
         });
 
-
-        it("reverts if doTransferIn fails", async () => {
-          await send(mToken.underlying, 'harnessSetFailTransferFromAddress', [payer, true]);
-          await expect(repayBorrowFresh(mToken, payer, borrower, repayAmount)).rejects.toRevert("revert TOKEN_TRANSFER_IN_FAILED");
+        it("reverts if checkTransferIn fails", async () => {
+          await expect(
+            send(mToken, 'harnessRepayBorrowFresh', [payer, borrower, repayAmount], {from: root, value: repayAmount})
+          ).rejects.toRevert("revert sender mismatch");
+          await expect(
+            send(mToken, 'harnessRepayBorrowFresh', [payer, borrower, repayAmount], {from: payer, value: 1})
+          ).rejects.toRevert("revert value mismatch");
         });
 
         it("reverts if repayBorrowVerify fails", async() => {
@@ -229,15 +226,25 @@ describe('#MErc20/borrowAndRepay', function () {
           await expect(repayBorrowFresh(mToken, payer, borrower, repayAmount)).rejects.toRevert("revert repayBorrowVerify rejected repayBorrow");
         });
 
-        it("transfers the underlying cash, and emits Transfer, RepayBorrow events", async () => {
-          const beforeProtocolCash = await balanceOf(mToken.underlying, mToken._address);
+        it("transfers the underlying cash, and emits RepayBorrow event", async () => {
+          const beforeBalances = await getBalances([mToken], [borrower]);
           const result = await repayBorrowFresh(mToken, payer, borrower, repayAmount);
-          expect(await balanceOf(mToken.underlying, mToken._address)).toEqualNumber(beforeProtocolCash.plus(repayAmount));
-          expect(result).toHaveLog('Transfer', {
-            from: payer,
-            to: mToken._address,
-            amount: repayAmount.toString()
-          });
+          const afterBalances = await getBalances([mToken], [borrower]);
+          expect(result).toSucceed();
+          if (borrower == payer) {
+            expect(afterBalances).toEqual(await adjustBalances(beforeBalances, [
+              [mToken, 'eth', repayAmount],
+              [mToken, 'borrows', -repayAmount],
+              [mToken, borrower, 'borrows', -repayAmount],
+              [mToken, borrower, 'eth', -repayAmount.plus(await etherGasCost(result))]
+            ]));
+          } else {
+            expect(afterBalances).toEqual(await adjustBalances(beforeBalances, [
+              [mToken, 'eth', repayAmount],
+              [mToken, 'borrows', -repayAmount],
+              [mToken, borrower, 'borrows', -repayAmount],
+            ]));
+          }
           expect(result).toHaveLog('RepayBorrow', {
             payer: payer,
             borrower: borrower,
@@ -265,14 +272,14 @@ describe('#MErc20/borrowAndRepay', function () {
       await preRepay(mToken, borrower, borrower, repayAmount);
     });
 
-    it("emits a repay borrow failure if interest accrual fails", async () => {
+    it("reverts if interest accrual fails", async () => {
       await send(mToken.interestRateModel, 'setFailBorrowRate', [true]);
       await expect(repayBorrow(mToken, borrower, repayAmount)).rejects.toRevert("revert INTEREST_RATE_MODEL_ERROR");
     });
 
-    it("returns error from repayBorrowFresh without emitting any extra logs", async () => {
-      await setBalance(mToken.underlying, borrower, 1);
-      await expect(repayBorrow(mToken, borrower, repayAmount)).rejects.toRevert('revert Insufficient balance');
+    it("reverts when repay borrow fresh fails", async () => {
+      await send(mToken.momaPool, 'setRepayBorrowAllowed', [false]);
+      await expect(repayBorrow(mToken, borrower, repayAmount)).rejects.toRevertWithError('MOMAMASTER_REJECTION', "revert repayBorrow failed");
     });
 
     it("returns success from repayBorrowFresh and repays the right amount", async () => {
@@ -283,17 +290,11 @@ describe('#MErc20/borrowAndRepay', function () {
       expect(afterAccountBorrowSnap.principal).toEqualNumber(beforeAccountBorrowSnap.principal.minus(repayAmount));
     });
 
-    it("repays the full amount owed if payer has enough", async () => {
-      await fastForward(mToken);
-      expect(await repayBorrow(mToken, borrower, UInt256Max())).toSucceed();
-      const afterAccountBorrowSnap = await borrowSnapshot(mToken, borrower);
-      expect(afterAccountBorrowSnap.principal).toEqualNumber(0);
-    });
-
-    it("fails gracefully if payer does not have enough", async () => {
-      await setBalance(mToken.underlying, borrower, 3);
-      await fastForward(mToken);
-      await expect(repayBorrow(mToken, borrower, UInt256Max())).rejects.toRevert('revert Insufficient balance');
+    it("reverts if overpaying", async () => {
+      const beforeAccountBorrowSnap = await borrowSnapshot(mToken, borrower);
+      let tooMuch = new BigNumber(beforeAccountBorrowSnap.principal).plus(1);
+      await expect(repayBorrow(mToken, borrower, tooMuch)).rejects.toRevert("revert REPAY_BORROW_NEW_ACCOUNT_BORROW_BALANCE_CALCULATION_FAILED");
+      // await assert.toRevertWithError(repayBorrow(mToken, borrower, tooMuch), 'MATH_ERROR', "revert repayBorrow failed");
     });
   });
 
@@ -305,14 +306,14 @@ describe('#MErc20/borrowAndRepay', function () {
       await preRepay(mToken, payer, borrower, repayAmount);
     });
 
-    it("emits a repay borrow failure if interest accrual fails", async () => {
+    it("reverts if interest accrual fails", async () => {
       await send(mToken.interestRateModel, 'setFailBorrowRate', [true]);
       await expect(repayBorrowBehalf(mToken, payer, borrower, repayAmount)).rejects.toRevert("revert INTEREST_RATE_MODEL_ERROR");
     });
 
-    it("returns error from repayBorrowFresh without emitting any extra logs", async () => {
-      await setBalance(mToken.underlying, payer, 1);
-      await expect(repayBorrowBehalf(mToken, payer, borrower, repayAmount)).rejects.toRevert('revert Insufficient balance');
+    it("reverts from within repay borrow fresh", async () => {
+      await send(mToken.momaPool, 'setRepayBorrowAllowed', [false]);
+      await expect(repayBorrowBehalf(mToken, payer, borrower, repayAmount)).rejects.toRevertWithError('MOMAMASTER_REJECTION', "revert repayBorrowBehalf failed");
     });
 
     it("returns success from repayBorrowFresh and repays the right amount", async () => {

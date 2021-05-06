@@ -5,7 +5,7 @@ const {
 } = require('../Utils/Ethereum');
 
 const {
-  makeCToken,
+  makeMToken,
   balanceOf,
   fastForward,
   setBalance,
@@ -16,7 +16,7 @@ const {
   preSupply,
   quickRedeem,
   quickRedeemUnderlying
-} = require('../Utils/Compound');
+} = require('../Utils/Moma');
 
 const exchangeRate = 50e3;
 const mintAmount = etherUnsigned(10e4);
@@ -24,101 +24,101 @@ const mintTokens = mintAmount.dividedBy(exchangeRate);
 const redeemTokens = etherUnsigned(10e3);
 const redeemAmount = redeemTokens.multipliedBy(exchangeRate);
 
-async function preMint(cToken, minter, mintAmount, mintTokens, exchangeRate) {
-  await preApprove(cToken, minter, mintAmount);
-  await send(cToken.comptroller, 'setMintAllowed', [true]);
-  await send(cToken.comptroller, 'setMintVerify', [true]);
-  await send(cToken.interestRateModel, 'setFailBorrowRate', [false]);
-  await send(cToken.underlying, 'harnessSetFailTransferFromAddress', [minter, false]);
-  await send(cToken, 'harnessSetBalance', [minter, 0]);
-  await send(cToken, 'harnessSetExchangeRate', [etherMantissa(exchangeRate)]);
+async function preMint(mToken, minter, mintAmount, mintTokens, exchangeRate) {
+  await preApprove(mToken, minter, mintAmount);
+  await send(mToken.momaPool, 'setMintAllowed', [true]);
+  await send(mToken.momaPool, 'setMintVerify', [true]);
+  await send(mToken.interestRateModel, 'setFailBorrowRate', [false]);
+  await send(mToken.underlying, 'harnessSetFailTransferFromAddress', [minter, false]);
+  await send(mToken, 'harnessSetBalance', [minter, 0]);
+  await send(mToken, 'harnessSetExchangeRate', [etherMantissa(exchangeRate)]);
 }
 
-async function mintFresh(cToken, minter, mintAmount) {
-  return send(cToken, 'harnessMintFresh', [minter, mintAmount]);
+async function mintFresh(mToken, minter, mintAmount) {
+  return send(mToken, 'harnessMintFresh', [minter, mintAmount]);
 }
 
-async function preRedeem(cToken, redeemer, redeemTokens, redeemAmount, exchangeRate) {
-  await preSupply(cToken, redeemer, redeemTokens);
-  await send(cToken.comptroller, 'setRedeemAllowed', [true]);
-  await send(cToken.comptroller, 'setRedeemVerify', [true]);
-  await send(cToken.interestRateModel, 'setFailBorrowRate', [false]);
-  await send(cToken.underlying, 'harnessSetBalance', [cToken._address, redeemAmount]);
-  await send(cToken.underlying, 'harnessSetBalance', [redeemer, 0]);
-  await send(cToken.underlying, 'harnessSetFailTransferToAddress', [redeemer, false]);
-  await send(cToken, 'harnessSetExchangeRate', [etherMantissa(exchangeRate)]);
+async function preRedeem(mToken, redeemer, redeemTokens, redeemAmount, exchangeRate) {
+  await preSupply(mToken, redeemer, redeemTokens);
+  await send(mToken.momaPool, 'setRedeemAllowed', [true]);
+  await send(mToken.momaPool, 'setRedeemVerify', [true]);
+  await send(mToken.interestRateModel, 'setFailBorrowRate', [false]);
+  await send(mToken.underlying, 'harnessSetBalance', [mToken._address, redeemAmount]);
+  await send(mToken.underlying, 'harnessSetBalance', [redeemer, 0]);
+  await send(mToken.underlying, 'harnessSetFailTransferToAddress', [redeemer, false]);
+  await send(mToken, 'harnessSetExchangeRate', [etherMantissa(exchangeRate)]);
 }
 
-async function redeemFreshTokens(cToken, redeemer, redeemTokens, redeemAmount) {
-  return send(cToken, 'harnessRedeemFresh', [redeemer, redeemTokens, 0]);
+async function redeemFreshTokens(mToken, redeemer, redeemTokens, redeemAmount) {
+  return send(mToken, 'harnessRedeemFresh', [redeemer, redeemTokens, 0]);
 }
 
-async function redeemFreshAmount(cToken, redeemer, redeemTokens, redeemAmount) {
-  return send(cToken, 'harnessRedeemFresh', [redeemer, 0, redeemAmount]);
+async function redeemFreshAmount(mToken, redeemer, redeemTokens, redeemAmount) {
+  return send(mToken, 'harnessRedeemFresh', [redeemer, 0, redeemAmount]);
 }
 
-describe('CToken', function () {
+describe('#MErc20/mintAndRedeem', function () {
   let root, minter, redeemer, accounts;
-  let cToken;
+  let mToken;
   beforeEach(async () => {
     [root, minter, redeemer, ...accounts] = saddle.accounts;
-    cToken = await makeCToken({comptrollerOpts: {kind: 'bool'}, exchangeRate});
+    mToken = await makeMToken({implementation: 'MErc20DelegateHarness', setInterestRateModel: true, boolMomaMaster: true, exchangeRate});
   });
 
   describe('mintFresh', () => {
     beforeEach(async () => {
-      await preMint(cToken, minter, mintAmount, mintTokens, exchangeRate);
+      await preMint(mToken, minter, mintAmount, mintTokens, exchangeRate);
     });
 
-    it("fails if comptroller tells it to", async () => {
-      await send(cToken.comptroller, 'setMintAllowed', [false]);
-      expect(await mintFresh(cToken, minter, mintAmount)).toHaveTrollReject('MINT_COMPTROLLER_REJECTION', 'MATH_ERROR');
+    it("fails if momaPool tells it to", async () => {
+      await send(mToken.momaPool, 'setMintAllowed', [false]);
+      expect(await mintFresh(mToken, minter, mintAmount)).toHaveTrollReject('MINT_MOMAMASTER_REJECTION', 'MATH_ERROR');
     });
 
-    it("proceeds if comptroller tells it to", async () => {
-      await expect(await mintFresh(cToken, minter, mintAmount)).toSucceed();
+    it("proceeds if momaPool tells it to", async () => {
+      await expect(await mintFresh(mToken, minter, mintAmount)).toSucceed();
     });
 
     it("fails if not fresh", async () => {
-      await fastForward(cToken);
-      expect(await mintFresh(cToken, minter, mintAmount)).toHaveTokenFailure('MARKET_NOT_FRESH', 'MINT_FRESHNESS_CHECK');
+      await fastForward(mToken);
+      expect(await mintFresh(mToken, minter, mintAmount)).toHaveTokenFailure('MARKET_NOT_FRESH', 'MINT_FRESHNESS_CHECK');
     });
 
     it("continues if fresh", async () => {
-      await expect(await send(cToken, 'accrueInterest')).toSucceed();
-      expect(await mintFresh(cToken, minter, mintAmount)).toSucceed();
+      await expect(await send(mToken, 'accrueInterest')).toSucceed();
+      expect(await mintFresh(mToken, minter, mintAmount)).toSucceed();
     });
 
     it("fails if insufficient approval", async () => {
       expect(
-        await send(cToken.underlying, 'approve', [cToken._address, 1], {from: minter})
+        await send(mToken.underlying, 'approve', [mToken._address, 1], {from: minter})
       ).toSucceed();
-      await expect(mintFresh(cToken, minter, mintAmount)).rejects.toRevert('revert Insufficient allowance');
+      await expect(mintFresh(mToken, minter, mintAmount)).rejects.toRevert('revert Insufficient allowance');
     });
 
     it("fails if insufficient balance", async() => {
-      await setBalance(cToken.underlying, minter, 1);
-      await expect(mintFresh(cToken, minter, mintAmount)).rejects.toRevert('revert Insufficient balance');
+      await setBalance(mToken.underlying, minter, 1);
+      await expect(mintFresh(mToken, minter, mintAmount)).rejects.toRevert('revert Insufficient balance');
     });
 
     it("proceeds if sufficient approval and balance", async () =>{
-      expect(await mintFresh(cToken, minter, mintAmount)).toSucceed();
+      expect(await mintFresh(mToken, minter, mintAmount)).toSucceed();
     });
 
     it("fails if exchange calculation fails", async () => {
-      expect(await send(cToken, 'harnessSetExchangeRate', [0])).toSucceed();
-      await expect(mintFresh(cToken, minter, mintAmount)).rejects.toRevert('revert MINT_EXCHANGE_CALCULATION_FAILED');
+      expect(await send(mToken, 'harnessSetExchangeRate', [0])).toSucceed();
+      await expect(mintFresh(mToken, minter, mintAmount)).rejects.toRevert('revert MINT_EXCHANGE_CALCULATION_FAILED');
     });
 
     it("fails if transferring in fails", async () => {
-      await send(cToken.underlying, 'harnessSetFailTransferFromAddress', [minter, true]);
-      await expect(mintFresh(cToken, minter, mintAmount)).rejects.toRevert('revert TOKEN_TRANSFER_IN_FAILED');
+      await send(mToken.underlying, 'harnessSetFailTransferFromAddress', [minter, true]);
+      await expect(mintFresh(mToken, minter, mintAmount)).rejects.toRevert('revert TOKEN_TRANSFER_IN_FAILED');
     });
 
     it("transfers the underlying cash, tokens, and emits Mint, Transfer events", async () => {
-      const beforeBalances = await getBalances([cToken], [minter]);
-      const result = await mintFresh(cToken, minter, mintAmount);
-      const afterBalances = await getBalances([cToken], [minter]);
+      const beforeBalances = await getBalances([mToken], [minter]);
+      const result = await mintFresh(mToken, minter, mintAmount);
+      const afterBalances = await getBalances([mToken], [minter]);
       expect(result).toSucceed();
       expect(result).toHaveLog('Mint', {
         minter,
@@ -126,42 +126,42 @@ describe('CToken', function () {
         mintTokens: mintTokens.toString()
       });
       expect(result).toHaveLog(['Transfer', 1], {
-        from: cToken._address,
+        from: mToken._address,
         to: minter,
         amount: mintTokens.toString()
       });
       expect(afterBalances).toEqual(await adjustBalances(beforeBalances, [
-        [cToken, minter, 'cash', -mintAmount],
-        [cToken, minter, 'tokens', mintTokens],
-        [cToken, 'cash', mintAmount],
-        [cToken, 'tokens', mintTokens]
+        [mToken, minter, 'cash', -mintAmount],
+        [mToken, minter, 'tokens', mintTokens],
+        [mToken, 'cash', mintAmount],
+        [mToken, 'tokens', mintTokens]
       ]));
     });
   });
 
   describe('mint', () => {
     beforeEach(async () => {
-      await preMint(cToken, minter, mintAmount, mintTokens, exchangeRate);
+      await preMint(mToken, minter, mintAmount, mintTokens, exchangeRate);
     });
 
     it("emits a mint failure if interest accrual fails", async () => {
-      await send(cToken.interestRateModel, 'setFailBorrowRate', [true]);
-      await expect(quickMint(cToken, minter, mintAmount)).rejects.toRevert("revert INTEREST_RATE_MODEL_ERROR");
+      await send(mToken.interestRateModel, 'setFailBorrowRate', [true]);
+      await expect(quickMint(mToken, minter, mintAmount)).rejects.toRevert("revert INTEREST_RATE_MODEL_ERROR");
     });
 
     it("returns error from mintFresh without emitting any extra logs", async () => {
-      await send(cToken.underlying, 'harnessSetBalance', [minter, 1]);
-      await expect(mintFresh(cToken, minter, mintAmount)).rejects.toRevert('revert Insufficient balance');
+      await send(mToken.underlying, 'harnessSetBalance', [minter, 1]);
+      await expect(mintFresh(mToken, minter, mintAmount)).rejects.toRevert('revert Insufficient balance');
     });
 
     it("returns success from mintFresh and mints the correct number of tokens", async () => {
-      expect(await quickMint(cToken, minter, mintAmount)).toSucceed();
+      expect(await quickMint(mToken, minter, mintAmount)).toSucceed();
       expect(mintTokens).not.toEqualNumber(0);
-      expect(await balanceOf(cToken, minter)).toEqualNumber(mintTokens);
+      expect(await balanceOf(mToken, minter)).toEqualNumber(mintTokens);
     });
 
     it("emits an AccrueInterest event", async () => {
-      expect(await quickMint(cToken, minter, mintAmount)).toHaveLog('AccrueInterest', {
+      expect(await quickMint(mToken, minter, mintAmount)).toHaveLog('AccrueInterest', {
         borrowIndex: "1000000000000000000",
         cashPrior: "0",
         interestAccumulated: "0",
@@ -173,58 +173,58 @@ describe('CToken', function () {
   [redeemFreshTokens, redeemFreshAmount].forEach((redeemFresh) => {
     describe(redeemFresh.name, () => {
       beforeEach(async () => {
-        await preRedeem(cToken, redeemer, redeemTokens, redeemAmount, exchangeRate);
+        await preRedeem(mToken, redeemer, redeemTokens, redeemAmount, exchangeRate);
       });
 
-      it("fails if comptroller tells it to", async () =>{
-        await send(cToken.comptroller, 'setRedeemAllowed', [false]);
-        expect(await redeemFresh(cToken, redeemer, redeemTokens, redeemAmount)).toHaveTrollReject('REDEEM_COMPTROLLER_REJECTION');
+      it("fails if momaPool tells it to", async () =>{
+        await send(mToken.momaPool, 'setRedeemAllowed', [false]);
+        expect(await redeemFresh(mToken, redeemer, redeemTokens, redeemAmount)).toHaveTrollReject('REDEEM_MOMAMASTER_REJECTION');
       });
 
       it("fails if not fresh", async () => {
-        await fastForward(cToken);
-        expect(await redeemFresh(cToken, redeemer, redeemTokens, redeemAmount)).toHaveTokenFailure('MARKET_NOT_FRESH', 'REDEEM_FRESHNESS_CHECK');
+        await fastForward(mToken);
+        expect(await redeemFresh(mToken, redeemer, redeemTokens, redeemAmount)).toHaveTokenFailure('MARKET_NOT_FRESH', 'REDEEM_FRESHNESS_CHECK');
       });
 
       it("continues if fresh", async () => {
-        await expect(await send(cToken, 'accrueInterest')).toSucceed();
-        expect(await redeemFresh(cToken, redeemer, redeemTokens, redeemAmount)).toSucceed();
+        await expect(await send(mToken, 'accrueInterest')).toSucceed();
+        expect(await redeemFresh(mToken, redeemer, redeemTokens, redeemAmount)).toSucceed();
       });
 
       it("fails if insufficient protocol cash to transfer out", async() => {
-        await send(cToken.underlying, 'harnessSetBalance', [cToken._address, 1]);
-        expect(await redeemFresh(cToken, redeemer, redeemTokens, redeemAmount)).toHaveTokenFailure('TOKEN_INSUFFICIENT_CASH', 'REDEEM_TRANSFER_OUT_NOT_POSSIBLE');
+        await send(mToken.underlying, 'harnessSetBalance', [mToken._address, 1]);
+        expect(await redeemFresh(mToken, redeemer, redeemTokens, redeemAmount)).toHaveTokenFailure('TOKEN_INSUFFICIENT_CASH', 'REDEEM_TRANSFER_OUT_NOT_POSSIBLE');
       });
 
       it("fails if exchange calculation fails", async () => {
         if (redeemFresh == redeemFreshTokens) {
-          expect(await send(cToken, 'harnessSetExchangeRate', [UInt256Max()])).toSucceed();
-          expect(await redeemFresh(cToken, redeemer, redeemTokens, redeemAmount)).toHaveTokenFailure('MATH_ERROR', 'REDEEM_EXCHANGE_TOKENS_CALCULATION_FAILED');
+          expect(await send(mToken, 'harnessSetExchangeRate', [UInt256Max()])).toSucceed();
+          expect(await redeemFresh(mToken, redeemer, redeemTokens, redeemAmount)).toHaveTokenFailure('MATH_ERROR', 'REDEEM_EXCHANGE_TOKENS_CALCULATION_FAILED');
         } else {
-          expect(await send(cToken, 'harnessSetExchangeRate', [0])).toSucceed();
-          expect(await redeemFresh(cToken, redeemer, redeemTokens, redeemAmount)).toHaveTokenFailure('MATH_ERROR', 'REDEEM_EXCHANGE_AMOUNT_CALCULATION_FAILED');
+          expect(await send(mToken, 'harnessSetExchangeRate', [0])).toSucceed();
+          expect(await redeemFresh(mToken, redeemer, redeemTokens, redeemAmount)).toHaveTokenFailure('MATH_ERROR', 'REDEEM_EXCHANGE_AMOUNT_CALCULATION_FAILED');
         }
       });
 
       it("fails if transferring out fails", async () => {
-        await send(cToken.underlying, 'harnessSetFailTransferToAddress', [redeemer, true]);
-        await expect(redeemFresh(cToken, redeemer, redeemTokens, redeemAmount)).rejects.toRevert("revert TOKEN_TRANSFER_OUT_FAILED");
+        await send(mToken.underlying, 'harnessSetFailTransferToAddress', [redeemer, true]);
+        await expect(redeemFresh(mToken, redeemer, redeemTokens, redeemAmount)).rejects.toRevert("revert TOKEN_TRANSFER_OUT_FAILED");
       });
 
       it("fails if total supply < redemption amount", async () => {
-        await send(cToken, 'harnessExchangeRateDetails', [0, 0, 0]);
-        expect(await redeemFresh(cToken, redeemer, redeemTokens, redeemAmount)).toHaveTokenFailure('MATH_ERROR', 'REDEEM_NEW_TOTAL_SUPPLY_CALCULATION_FAILED');
+        await send(mToken, 'harnessExchangeRateDetails', [0, 0, 0, 0, 0]);
+        expect(await redeemFresh(mToken, redeemer, redeemTokens, redeemAmount)).toHaveTokenFailure('MATH_ERROR', 'REDEEM_NEW_TOTAL_SUPPLY_CALCULATION_FAILED');
       });
 
       it("reverts if new account balance underflows", async () => {
-        await send(cToken, 'harnessSetBalance', [redeemer, 0]);
-        expect(await redeemFresh(cToken, redeemer, redeemTokens, redeemAmount)).toHaveTokenFailure('MATH_ERROR', 'REDEEM_NEW_ACCOUNT_BALANCE_CALCULATION_FAILED');
+        await send(mToken, 'harnessSetBalance', [redeemer, 0]);
+        expect(await redeemFresh(mToken, redeemer, redeemTokens, redeemAmount)).toHaveTokenFailure('MATH_ERROR', 'REDEEM_NEW_ACCOUNT_BALANCE_CALCULATION_FAILED');
       });
 
       it("transfers the underlying cash, tokens, and emits Redeem, Transfer events", async () => {
-        const beforeBalances = await getBalances([cToken], [redeemer]);
-        const result = await redeemFresh(cToken, redeemer, redeemTokens, redeemAmount);
-        const afterBalances = await getBalances([cToken], [redeemer]);
+        const beforeBalances = await getBalances([mToken], [redeemer]);
+        const result = await redeemFresh(mToken, redeemer, redeemTokens, redeemAmount);
+        const afterBalances = await getBalances([mToken], [redeemer]);
         expect(result).toSucceed();
         expect(result).toHaveLog('Redeem', {
           redeemer,
@@ -233,14 +233,14 @@ describe('CToken', function () {
         });
         expect(result).toHaveLog(['Transfer', 1], {
           from: redeemer,
-          to: cToken._address,
+          to: mToken._address,
           amount: redeemTokens.toString()
         });
         expect(afterBalances).toEqual(await adjustBalances(beforeBalances, [
-          [cToken, redeemer, 'cash', redeemAmount],
-          [cToken, redeemer, 'tokens', -redeemTokens],
-          [cToken, 'cash', -redeemAmount],
-          [cToken, 'tokens', -redeemTokens]
+          [mToken, redeemer, 'cash', redeemAmount],
+          [mToken, redeemer, 'tokens', -redeemTokens],
+          [mToken, 'cash', -redeemAmount],
+          [mToken, 'tokens', -redeemTokens]
         ]));
       });
     });
@@ -248,41 +248,41 @@ describe('CToken', function () {
 
   describe('redeem', () => {
     beforeEach(async () => {
-      await preRedeem(cToken, redeemer, redeemTokens, redeemAmount, exchangeRate);
+      await preRedeem(mToken, redeemer, redeemTokens, redeemAmount, exchangeRate);
     });
 
     it("emits a redeem failure if interest accrual fails", async () => {
-      await send(cToken.interestRateModel, 'setFailBorrowRate', [true]);
-      await expect(quickRedeem(cToken, redeemer, redeemTokens)).rejects.toRevert("revert INTEREST_RATE_MODEL_ERROR");
+      await send(mToken.interestRateModel, 'setFailBorrowRate', [true]);
+      await expect(quickRedeem(mToken, redeemer, redeemTokens)).rejects.toRevert("revert INTEREST_RATE_MODEL_ERROR");
     });
 
     it("returns error from redeemFresh without emitting any extra logs", async () => {
-      await setBalance(cToken.underlying, cToken._address, 0);
-      expect(await quickRedeem(cToken, redeemer, redeemTokens, {exchangeRate})).toHaveTokenFailure('TOKEN_INSUFFICIENT_CASH', 'REDEEM_TRANSFER_OUT_NOT_POSSIBLE');
+      await setBalance(mToken.underlying, mToken._address, 0);
+      expect(await quickRedeem(mToken, redeemer, redeemTokens, {exchangeRate})).toHaveTokenFailure('TOKEN_INSUFFICIENT_CASH', 'REDEEM_TRANSFER_OUT_NOT_POSSIBLE');
     });
 
     it("returns success from redeemFresh and redeems the right amount", async () => {
       expect(
-        await send(cToken.underlying, 'harnessSetBalance', [cToken._address, redeemAmount])
+        await send(mToken.underlying, 'harnessSetBalance', [mToken._address, redeemAmount])
       ).toSucceed();
-      expect(await quickRedeem(cToken, redeemer, redeemTokens, {exchangeRate})).toSucceed();
+      expect(await quickRedeem(mToken, redeemer, redeemTokens, {exchangeRate})).toSucceed();
       expect(redeemAmount).not.toEqualNumber(0);
-      expect(await balanceOf(cToken.underlying, redeemer)).toEqualNumber(redeemAmount);
+      expect(await balanceOf(mToken.underlying, redeemer)).toEqualNumber(redeemAmount);
     });
 
     it("returns success from redeemFresh and redeems the right amount of underlying", async () => {
       expect(
-        await send(cToken.underlying, 'harnessSetBalance', [cToken._address, redeemAmount])
+        await send(mToken.underlying, 'harnessSetBalance', [mToken._address, redeemAmount])
       ).toSucceed();
       expect(
-        await quickRedeemUnderlying(cToken, redeemer, redeemAmount, {exchangeRate})
+        await quickRedeemUnderlying(mToken, redeemer, redeemAmount, {exchangeRate})
       ).toSucceed();
       expect(redeemAmount).not.toEqualNumber(0);
-      expect(await balanceOf(cToken.underlying, redeemer)).toEqualNumber(redeemAmount);
+      expect(await balanceOf(mToken.underlying, redeemer)).toEqualNumber(redeemAmount);
     });
 
     it("emits an AccrueInterest event", async () => {
-      expect(await quickMint(cToken, minter, mintAmount)).toHaveLog('AccrueInterest', {
+      expect(await quickMint(mToken, minter, mintAmount)).toHaveLog('AccrueInterest', {
         borrowIndex: "1000000000000000000",
         cashPrior: "500000000",
         interestAccumulated: "0",

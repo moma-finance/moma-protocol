@@ -6,11 +6,12 @@ const {
 } = require('./Utils/Ethereum');
 
 const {
-  makeCToken,
+  makeMToken,
   balanceOf,
   borrowSnapshot,
-  enterMarkets
-} = require('./Utils/Compound');
+  enterMarkets,
+  upgradeLendingPool
+} = require('./Utils/Moma');
 
 describe('Spinarama', () => {
   let root, from, accounts;
@@ -21,25 +22,25 @@ describe('Spinarama', () => {
 
   describe('#mintMint', () => {
     it('should succeed', async () => {
-      const cToken = await makeCToken({supportMarket: true});
-      await send(cToken.underlying, 'harnessSetBalance', [from, 100], {from});
-      await send(cToken.underlying, 'approve', [cToken._address, UInt256Max()], {from});
+      const mToken = await makeMToken({supportMarket: true, addFarmingDelegate: true, addMomaFarming: true});
+      await send(mToken.underlying, 'harnessSetBalance', [from, 100], {from});
+      await send(mToken.underlying, 'approve', [mToken._address, UInt256Max()], {from});
       await minerStop();
-      const p1 = send(cToken, 'mint', [1], {from});
-      const p2 = send(cToken, 'mint', [2], {from});
+      const p1 = send(mToken, 'mint', [1], {from});
+      const p2 = send(mToken, 'mint', [2], {from});
       await minerStart();
       expect(await p1).toSucceed();
       expect(await p2).toSucceed();
-      expect(await balanceOf(cToken, from)).toEqualNumber(3);
+      expect(await balanceOf(mToken, from)).toEqualNumber(3);
     });
 
     it('should partial succeed', async () => {
-      const cToken = await makeCToken({supportMarket: true});
-      await send(cToken.underlying, 'harnessSetBalance', [from, 100], {from});
-      await send(cToken.underlying, 'approve', [cToken._address, 10], {from});
+      const mToken = await makeMToken({supportMarket: true, addFarmingDelegate: true, addMomaFarming: true});
+      await send(mToken.underlying, 'harnessSetBalance', [from, 100], {from});
+      await send(mToken.underlying, 'approve', [mToken._address, 10], {from});
       await minerStop();
-      const p1 = send(cToken, 'mint', [11], {from});
-      const p2 = send(cToken, 'mint', [10], {from});
+      const p1 = send(mToken, 'mint', [11], {from});
+      const p2 = send(mToken, 'mint', [10], {from});
       await expect(minerStart()).rejects.toRevert("revert Insufficient allowance");
       try {
         await p1;
@@ -48,63 +49,65 @@ describe('Spinarama', () => {
         expect(err.toString()).toContain("reverted by the EVM");
       }
       await expect(p2).resolves.toSucceed();
-      expect(await balanceOf(cToken, from)).toEqualNumber(10);
+      expect(await balanceOf(mToken, from)).toEqualNumber(10);
     });
   });
 
   describe('#mintRedeem', () => {
     it('should succeed', async () => {
-      const cToken = await makeCToken({supportMarket: true});
-      await send(cToken.underlying, 'harnessSetBalance', [from, 100], {from});
-      await send(cToken.underlying, 'approve', [cToken._address, 10], {from});
+      const mToken = await makeMToken({supportMarket: true, addFarmingDelegate: true, addMomaFarming: true});
+      await send(mToken.underlying, 'harnessSetBalance', [from, 100], {from});
+      await send(mToken.underlying, 'approve', [mToken._address, 10], {from});
       await minerStop();
-      const p1 = send(cToken, 'mint', [10], {from});
-      const p2 = send(cToken, 'redeemUnderlying', [10], {from});
+      const p1 = send(mToken, 'mint', [10], {from});
+      const p2 = send(mToken, 'redeemUnderlying', [10], {from});
       await minerStart();
       expect(await p1).toSucceed();
       expect(await p2).toSucceed();
-      expect(await balanceOf(cToken, from)).toEqualNumber(0);
+      expect(await balanceOf(mToken, from)).toEqualNumber(0);
     });
   });
 
   describe('#redeemMint', () => {
     it('should succeed', async () => {
-      const cToken = await makeCToken({supportMarket: true});
-      await send(cToken, 'harnessSetTotalSupply', [10]);
-      await send(cToken, 'harnessSetExchangeRate', [etherMantissa(1)]);
-      await send(cToken, 'harnessSetBalance', [from, 10]);
-      await send(cToken.underlying, 'harnessSetBalance', [cToken._address, 10]);
-      await send(cToken.underlying, 'approve', [cToken._address, 10], {from});
+      const mToken = await makeMToken({supportMarket: true, addFarmingDelegate: true, addMomaFarming: true, implementation: 'MErc20DelegateHarness'});
+      await send(mToken, 'harnessSetTotalSupply', [10]);
+      await send(mToken, 'harnessSetExchangeRate', [etherMantissa(1)]);
+      await send(mToken, 'harnessSetBalance', [from, 10]);
+      await send(mToken.underlying, 'harnessSetBalance', [mToken._address, 10]);
+      await send(mToken.underlying, 'approve', [mToken._address, 10], {from});
       await minerStop();
-      const p1 = send(cToken, 'redeem', [10], {from});
-      const p2 = send(cToken, 'mint', [10], {from});
+      const p1 = send(mToken, 'redeem', [10], {from});
+      const p2 = send(mToken, 'mint', [10], {from});
       await minerStart();
       expect(await p1).toSucceed();
       expect(await p2).toSucceed();
-      expect(await balanceOf(cToken, from)).toEqualNumber(10);
+      expect(await balanceOf(mToken, from)).toEqualNumber(10);
     });
   });
 
   describe('#repayRepay', () => {
     it('should succeed', async () => {
-      const cToken1 = await makeCToken({supportMarket: true, underlyingPrice: 1, collateralFactor: .5});
-      const cToken2 = await makeCToken({supportMarket: true, underlyingPrice: 1, comptroller: cToken1.comptroller});
-      await send(cToken1.underlying, 'harnessSetBalance', [from, 10]);
-      await send(cToken1.underlying, 'approve', [cToken1._address, 10], {from});
-      await send(cToken2.underlying, 'harnessSetBalance', [cToken2._address, 10]);
-      await send(cToken2, 'harnessSetTotalSupply', [100]);
-      await send(cToken2.underlying, 'approve', [cToken2._address, 10], {from});
-      await send(cToken2, 'harnessSetExchangeRate', [etherMantissa(1)]);
-      expect(await enterMarkets([cToken1, cToken2], from)).toSucceed();
-      expect(await send(cToken1, 'mint', [10], {from})).toSucceed();
-      expect(await send(cToken2, 'borrow', [2], {from})).toSucceed();
+      const mToken1 = await makeMToken({supportMarket: true, addPriceOracle: true, addFarmingDelegate: true, addMomaFarming: true, 
+        implementation: 'MErc20DelegateHarness', underlyingPrice: 1, collateralFactor: .5});
+      const mToken2 = await makeMToken({supportMarket: true, underlyingPrice: 1, momaPool: mToken1.momaPool, implementation: 'MErc20DelegateHarness'});
+      await upgradeLendingPool(mToken1.momaPool);
+      await send(mToken1.underlying, 'harnessSetBalance', [from, 10]);
+      await send(mToken1.underlying, 'approve', [mToken1._address, 10], {from});
+      await send(mToken2.underlying, 'harnessSetBalance', [mToken2._address, 10]);
+      await send(mToken2, 'harnessSetTotalSupply', [100]);
+      await send(mToken2.underlying, 'approve', [mToken2._address, 10], {from});
+      await send(mToken2, 'harnessSetExchangeRate', [etherMantissa(1)]);
+      expect(await enterMarkets([mToken1, mToken2], from)).toSucceed();
+      expect(await send(mToken1, 'mint', [10], {from})).toSucceed();
+      expect(await send(mToken2, 'borrow', [2], {from})).toSucceed();
       await minerStop();
-      const p1 = send(cToken2, 'repayBorrow', [1], {from});
-      const p2 = send(cToken2, 'repayBorrow', [1], {from});
+      const p1 = send(mToken2, 'repayBorrow', [1], {from});
+      const p2 = send(mToken2, 'repayBorrow', [1], {from});
       await minerStart();
       expect(await p1).toSucceed();
       expect(await p2).toSucceed();
-      expect((await borrowSnapshot(cToken2, from)).principal).toEqualNumber(0);
+      expect((await borrowSnapshot(mToken2, from)).principal).toEqualNumber(0);
     });
 
     // XXX not yet converted below this point...moving on to certora

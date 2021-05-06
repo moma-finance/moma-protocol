@@ -40,3 +40,7 @@ junit.xml
 .build
 .last_confs
 .saddle_history
+migrations/
+truffle-config.js
+contracts/artifacts
+contracts/Governance/artifacts

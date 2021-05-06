@@ -11,13 +11,13 @@ debug_args="-n --inspect" #add "debugger" statements to javascript and interact 
 [[ -z $DEBUG ]] && debug_args=""
 
 # Compile scenario runner
-[[ -z $NO_TSC ]] && "$proj_root/scenario/script/tsc"
+# [[ -z $NO_TSC ]] && "$proj_root/scenario/script/tsc"
 
 # Build scenario stubs
 [[ -z $NO_BUILD_STUB ]] && "$proj_root/script/compile"
 
 # Build scenario stubs
-[[ -z $NO_BUILD_SCEN ]] && "$proj_root/script/build_scenarios"
+# [[ -z $NO_BUILD_SCEN ]] && "$proj_root/script/build_scenarios"
 
 [[ -n $NO_RUN ]] && exit 0
 

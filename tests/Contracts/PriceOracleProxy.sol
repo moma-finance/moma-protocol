@@ -1,7 +1,7 @@
 pragma solidity ^0.5.16;
 
-import "../../contracts/CErc20.sol";
-import "../../contracts/CToken.sol";
+import "../../contracts/MErc20.sol";
+import "../../contracts/MToken.sol";
 import "../../contracts/PriceOracle.sol";
 
 interface V1PriceOracleInterface {
@@ -69,12 +69,12 @@ contract PriceOracleProxy is PriceOracle {
     }
 
     /**
-     * @notice Get the underlying price of a listed cToken asset
-     * @param cToken The cToken to get the underlying price of
+     * @notice Get the underlying price of a listed mToken asset
+     * @param mToken The mToken to get the underlying price of
      * @return The underlying asset price mantissa (scaled by 1e18)
      */
-    function getUnderlyingPrice(CToken cToken) public view returns (uint) {
-        address cTokenAddress = address(cToken);
+    function getUnderlyingPrice(MToken mToken) public view returns (uint) {
+        address cTokenAddress = address(mToken);
 
         if (cTokenAddress == cEthAddress) {
             // ether always worth 1
@@ -95,7 +95,7 @@ contract PriceOracleProxy is PriceOracle {
         }
 
         // otherwise just read from v1 oracle
-        address underlying = CErc20(cTokenAddress).underlying();
+        address underlying = MErc20(cTokenAddress).underlying();
         return v1PriceOracle.assetPrices(underlying);
     }
 

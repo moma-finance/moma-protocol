@@ -1,7 +1,9 @@
 const {
   etherGasCost,
   etherUnsigned,
-  UInt256Max
+  UInt256Max,
+  getBlock,
+  blockNumber
 } = require('../Utils/Ethereum');
 
 const {
@@ -10,8 +12,7 @@ const {
   setBalance,
   getBalances,
   adjustBalances,
-  pretendBorrow,
-  preApprove
+  pretendBorrow
 } = require('../Utils/Moma');
 
 const repayAmount = etherUnsigned(10e2);
@@ -27,39 +28,40 @@ async function preLiquidate(mToken, liquidator, borrower, repayAmount, mTokenCol
   await send(mToken.momaPool, 'setSeizeAllowed', [true]);
   await send(mToken.momaPool, 'setSeizeVerify', [true]);
   await send(mToken.momaPool, 'setFailCalculateSeizeTokens', [false]);
-  await send(mToken.underlying, 'harnessSetFailTransferFromAddress', [liquidator, false]);
   await send(mToken.interestRateModel, 'setFailBorrowRate', [false]);
   await send(mTokenCollateral.interestRateModel, 'setFailBorrowRate', [false]);
   await send(mTokenCollateral.momaPool, 'setCalculatedSeizeTokens', [seizeTokens]);
+  const tx = await send(mTokenCollateral, 'harnessSetBalance', [liquidator, 0]);
   await setBalance(mTokenCollateral, liquidator, 0);
   await setBalance(mTokenCollateral, borrower, seizeTokens);
   await pretendBorrow(mTokenCollateral, borrower, 0, 1, 0);
   await pretendBorrow(mToken, borrower, 1, 1, repayAmount);
-  await preApprove(mToken, liquidator, repayAmount);
 }
 
 async function liquidateFresh(mToken, liquidator, borrower, repayAmount, mTokenCollateral) {
-  return send(mToken, 'harnessLiquidateBorrowFresh', [liquidator, borrower, repayAmount, mTokenCollateral._address]);
+  return send(mToken, 'harnessLiquidateBorrowFresh', [liquidator, borrower, repayAmount, mTokenCollateral._address], 
+              {from: liquidator, value: repayAmount});
 }
 
 async function liquidate(mToken, liquidator, borrower, repayAmount, mTokenCollateral) {
   // make sure to have a block delta so we accrue interest
   await fastForward(mToken, 1);
   await fastForward(mTokenCollateral, 1);
-  return send(mToken, 'liquidateBorrow', [borrower, repayAmount, mTokenCollateral._address], {from: liquidator});
+  return send(mToken, 'liquidateBorrow', [borrower, mTokenCollateral._address], {value: repayAmount, from: liquidator});
 }
 
 async function seize(mToken, liquidator, borrower, seizeAmount) {
   return send(mToken, 'seize', [liquidator, borrower, seizeAmount]);
 }
 
-describe('#MErc20/liquidate', function () {
+describe('#MEther/liquidate', function () {
   let root, liquidator, borrower, accounts;
   let mToken, mTokenCollateral;
 
   beforeEach(async () => {
     [root, liquidator, borrower, ...accounts] = saddle.accounts;
-    mToken = await makeMToken({implementation: 'MErc20DelegateHarness', setInterestRateModel: true, boolMomaMaster: true});
+    mToken = await makeMToken({kind: 'mether', contract: 'MEtherDelegator', implementation: 'MEtherDelegateHarness', 
+                               setInterestRateModel: true, boolMomaMaster: true});
     mTokenCollateral = await makeMToken({momaPool: mToken.momaPool, implementation: 'MErc20DelegateHarness', setInterestRateModel: true});
   });
 
@@ -109,7 +111,7 @@ describe('#MErc20/liquidate', function () {
     });
 
     it("fails if repayAmount = uint(-1)", async () => {
-      expect(await liquidateFresh(mToken, liquidator, borrower, UInt256Max(), mTokenCollateral)
+      expect(await send(mToken, 'harnessLiquidateBorrowFresh', [liquidator, borrower, UInt256Max(), mTokenCollateral._address])
       ).toHaveTokenFailure('INVALID_CLOSE_AMOUNT_REQUESTED', 'LIQUIDATE_CLOSE_AMOUNT_IS_UINT_MAX');
     });
 
@@ -117,10 +119,17 @@ describe('#MErc20/liquidate', function () {
       const beforeBalances = await getBalances([mToken, mTokenCollateral], [liquidator, borrower]);
       await send(mToken.momaPool, 'setFailCalculateSeizeTokens', [true]);
       await expect(
-        liquidateFresh(mToken, liquidator, borrower, repayAmount, mTokenCollateral)
+        send(mToken, 'harnessLiquidateBorrowFresh', [liquidator, borrower, repayAmount, mTokenCollateral._address], 
+        {from: liquidator, value: repayAmount, gasPrice: 1})
       ).rejects.toRevert('revert LIQUIDATE_MOMAMASTER_CALCULATE_AMOUNT_SEIZE_FAILED');
       const afterBalances = await getBalances([mToken, mTokenCollateral], [liquidator, borrower]);
-      expect(afterBalances).toEqual(beforeBalances);
+      const blk = await getBlock(await blockNumber());
+      const tx = await web3.eth.getTransactionReceipt(blk.transactions[0].hash);
+      const gasCost = +tx.gasUsed;
+      expect(afterBalances).toEqual(await adjustBalances(beforeBalances, [
+        [mToken, liquidator, 'eth', -gasCost],
+        [mTokenCollateral, liquidator, 'eth', -gasCost],
+      ]));
     });
 
     it("fails if borrower collateral token balance < seizeTokens", async () => {
@@ -154,6 +163,7 @@ describe('#MErc20/liquidate', function () {
     it("transfers the cash, borrows, tokens, and emits Transfer, LiquidateBorrow events", async () => {
       const beforeBalances = await getBalances([mToken, mTokenCollateral], [liquidator, borrower]);
       const result = await liquidateFresh(mToken, liquidator, borrower, repayAmount, mTokenCollateral);
+      const gasCost = await etherGasCost(result);
       const afterBalances = await getBalances([mToken, mTokenCollateral], [liquidator, borrower]);
       expect(result).toSucceed();
       expect(result).toHaveLog('LiquidateBorrow', {
@@ -164,22 +174,18 @@ describe('#MErc20/liquidate', function () {
         seizeTokens: seizeTokens.toString()
       });
       expect(result).toHaveLog(['Transfer', 0], {
-        from: liquidator,
-        to: mToken._address,
-        amount: repayAmount.toString()
-      });
-      expect(result).toHaveLog(['Transfer', 1], {
         from: borrower,
         to: liquidator,
         amount: seizeTokens.toString()
       });
       expect(afterBalances).toEqual(await adjustBalances(beforeBalances, [
-        [mToken, 'cash', repayAmount],
+        [mToken, 'eth', repayAmount],
         [mToken, 'borrows', -repayAmount],
-        [mToken, liquidator, 'cash', -repayAmount],
+        [mToken, liquidator, 'eth', -repayAmount-gasCost],
         [mTokenCollateral, liquidator, 'tokens', seizeTokens],
         [mToken, borrower, 'borrows', -repayAmount],
-        [mTokenCollateral, borrower, 'tokens', -seizeTokens]
+        [mTokenCollateral, borrower, 'tokens', -seizeTokens],
+        [mTokenCollateral, liquidator, 'eth', -repayAmount-gasCost],
       ]));
     });
   });
@@ -197,9 +203,10 @@ describe('#MErc20/liquidate', function () {
         ).rejects.toRevert("revert INTEREST_RATE_MODEL_ERROR");
     });
 
-    it("returns error from liquidateBorrowFresh without emitting any extra logs", async () => {
-      expect(await liquidate(mToken, liquidator, borrower, 0, mTokenCollateral)
-        ).toHaveTokenFailure('INVALID_CLOSE_AMOUNT_REQUESTED', 'LIQUIDATE_CLOSE_AMOUNT_IS_ZERO');
+    it("reverts error from liquidateBorrowFresh without emitting any extra logs", async () => {
+      await expect(
+        liquidate(mToken, liquidator, borrower, 0, mTokenCollateral)
+      ).rejects.toRevert("revert liquidateBorrow failed (07)");
     });
 
     it("returns success from liquidateBorrowFresh and transfers the correct amounts", async () => {
@@ -209,11 +216,10 @@ describe('#MErc20/liquidate', function () {
       const afterBalances = await getBalances([mToken, mTokenCollateral], [liquidator, borrower]);
       expect(result).toSucceed();
       expect(afterBalances).toEqual(await adjustBalances(beforeBalances, [
-        [mToken, 'cash', repayAmount],
+        [mToken, 'eth', repayAmount],
         [mToken, 'borrows', -repayAmount],
-        [mToken, liquidator, 'eth', -gasCost],
-        [mToken, liquidator, 'cash', -repayAmount],
-        [mTokenCollateral, liquidator, 'eth', -gasCost],
+        [mToken, liquidator, 'eth', -gasCost-repayAmount],
+        [mTokenCollateral, liquidator, 'eth', -gasCost-repayAmount],
         [mTokenCollateral, liquidator, 'tokens', seizeTokens],
         [mToken, borrower, 'borrows', -repayAmount],
         [mTokenCollateral, borrower, 'tokens', -seizeTokens]

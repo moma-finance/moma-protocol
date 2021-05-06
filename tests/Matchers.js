@@ -327,7 +327,7 @@ expect.extend({
   },
 
   toHaveTrollReject(result, info, detail) {
-    return hasFailure.call(this, result, 'COMPTROLLER_REJECTION', info, detail && ComptrollerErr.Error[detail], TokenErr, 'toHaveTrollReject');
+    return hasFailure.call(this, result, 'MOMAMASTER_REJECTION', info, detail && ComptrollerErr.Error[detail], TokenErr, 'toHaveTrollReject');
   },
 
   toHaveTrollErrorTuple(result, tuple, cmp=undefined) {
