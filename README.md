@@ -6,7 +6,7 @@ Before getting started with this repo please read:
 - [Official Website](https://moma.finance/)
 - The [Moma Whitepaper](https://docsend.com/view/dzyu756wkd2n4izq), describing how Moma works
 
-For questions about interacting with Moma, please visit [our Discord server](https://discord.com/invite/VrrTqAm27j).
+For questions about interacting with Moma, please visit [our Telegram](https://t.me/Moma_Official).
 
 ## Contracts
 We detail a few of the core contracts in the Moma protocol.
@@ -28,3 +28,17 @@ Contracts which define interest rate models. These models algorithmically determ
 
 ### WhitePaperInterestRateModel
 Initial interest rate model, as defined in the Whitepaper. This contract accepts a base rate and slope parameter in its constructor.
+
+Installation
+------------
+To run moma, pull the repository from GitHub and install its dependencies. You will need [yarn](https://yarnpkg.com/lang/en/docs/install/) or [npm](https://docs.npmjs.com/cli/install) installed.
+
+    git clone https://github.com/moma-finance/moma-protocol.git
+    cd moma-protocol
+    yarn install --lock-file # or `npm install`
+
+Testing
+-------
+Jest contract tests are defined under the [tests directory](https://github.com/moma-finance/moma-protocol/tree/master/tests). To run the tests run:
+
+    yarn test
