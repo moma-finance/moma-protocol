@@ -9,8 +9,8 @@ const {
 const EIP712 = require('../Utils/EIP712');
 
 describe('Moma', () => {
-  const name = 'Moma';
-  const symbol = 'MOMA';
+  const name = 'Moma Token';
+  const symbol = 'MOMAT';
   const decimals = '18';
   const totalSupply = '100000000000000000000000000';
 
