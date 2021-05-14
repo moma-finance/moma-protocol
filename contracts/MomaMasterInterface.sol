@@ -1,4 +1,4 @@
-pragma solidity ^0.5.16;
+pragma solidity 0.5.17;
 
 interface MomaMasterInterface {
     /// @notice Indicator that this is a MomaMaster contract (for inspection)

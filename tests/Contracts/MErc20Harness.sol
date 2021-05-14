@@ -1,4 +1,4 @@
-pragma solidity ^0.5.16;
+pragma solidity 0.5.17;
 
 import "../../contracts/MErc20Immutable.sol";
 import "../../contracts/MErc20Delegator.sol";

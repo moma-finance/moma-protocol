@@ -1,4 +1,4 @@
-pragma solidity ^0.5.16;
+pragma solidity 0.5.17;
 
 contract FalseMarkerMethodMomaMaster {
     bool public constant isMomaMaster = false;
