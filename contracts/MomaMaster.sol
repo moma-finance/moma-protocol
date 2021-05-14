@@ -140,6 +140,11 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
             return Error.MARKET_NOT_LISTED;
         }
 
+        if (oracle.getUnderlyingPrice(mToken) == 0) {
+            // not have price
+            return Error.PRICE_ERROR;
+        }
+
         if (marketToJoin.accountMembership[borrower] == true) {
             // already joined
             return Error.NO_ERROR;

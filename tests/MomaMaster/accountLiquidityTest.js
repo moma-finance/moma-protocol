@@ -14,8 +14,9 @@ describe('MomaMaster', () => {
 
   describe('liquidity', () => {
     it("fails if a price has not been set", async () => {
-      const mToken = await makeMToken({supportMarket: true, addPriceOracle: true});
+      const mToken = await makeMToken({supportMarket: true, addPriceOracle: true, underlyingPrice: 0.5});
       await enterMarkets([mToken], accounts[1]);
+      await send(mToken.momaPool.priceOracle, 'setUnderlyingPrice', [mToken._address, 0]);
       let result = await call(mToken.momaPool, 'getAccountLiquidity', [accounts[1]]);
       expect(result).toHaveTrollError('PRICE_ERROR');
     });

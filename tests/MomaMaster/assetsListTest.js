@@ -83,6 +83,13 @@ describe('#MomaMaster/assetListTest', () => {
       await enterAndCheckMarkets([SKT], [SKT]);
     });
 
+    it("the market must have price for add to succeed", async () => {
+      const NP = await makeMToken({momaPool, name: 'NP', symbol: 'NP', supportMarket: true});
+      await enterAndCheckMarkets([NP], [], ['PRICE_ERROR']);
+      await send(momaPool.priceOracle, 'setUnderlyingPrice', [NP._address, 1]);
+      await enterAndCheckMarkets([NP], [NP]);
+    });
+
     it("returns a list of codes mapping to user's ultimate membership in given addresses", async () => {
       await enterAndCheckMarkets([OMG, ZRX, BAT], [OMG, ZRX, BAT], ['NO_ERROR', 'NO_ERROR', 'NO_ERROR'], "success if can enter markets");
       await enterAndCheckMarkets([OMG, SKT], [OMG, ZRX, BAT], ['NO_ERROR', 'MARKET_NOT_LISTED'], "error for unlisted markets");

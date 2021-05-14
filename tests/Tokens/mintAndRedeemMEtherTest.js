@@ -89,6 +89,35 @@ describe('#MEther/mintAndRedeem', () => {
           [mToken, minter, 'tokens', mintTokens]
         ]));
       });
+
+      it("work correctly with no orcle and interest rate model", async () => {
+        const mTokenP = await makeMToken({kind: 'mether', contract: 'MEtherDelegator', implementation: 'MEtherDelegateHarness', 
+                                          supportMarket: true, exchangeRate});
+        const beforeBalances = await getBalances([mTokenP], [minter]);
+        expect(await call(mTokenP, "interestRateModel")).toBeAddressZero();
+        expect(await call(mTokenP.momaPool, "oracle")).toBeAddressZero();
+
+        const receipt = await mint(mTokenP, minter, mintAmount);
+        const afterBalances = await getBalances([mTokenP], [minter]);
+        expect(receipt).toSucceed();
+        expect(mintTokens).not.toEqualNumber(0);
+        expect(afterBalances).toEqual(await adjustBalances(beforeBalances, [
+          [mTokenP, 'eth', mintAmount],
+          [mTokenP, 'tokens', mintTokens],
+          [mTokenP, minter, 'eth', -mintAmount.plus(await etherGasCost(receipt))],
+          [mTokenP, minter, 'tokens', mintTokens]
+        ]));
+
+        const receipt2 = await send(mTokenP, 'redeem', [mintTokens], { from: minter });
+        const afterRedeemBalances = await getBalances([mTokenP], [minter]);
+        expect(receipt2).toSucceed();
+        expect(afterRedeemBalances).toEqual(await adjustBalances(afterBalances, [
+          [mTokenP, 'eth', -mintAmount],
+          [mTokenP, 'tokens', -mintTokens],
+          [mTokenP, minter, 'eth', mintAmount.minus(await etherGasCost(receipt2))],
+          [mTokenP, minter, 'tokens', -mintTokens]
+        ]));
+      });
     });
   });
 

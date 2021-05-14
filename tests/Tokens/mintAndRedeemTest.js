@@ -168,6 +168,24 @@ describe('#MErc20/mintAndRedeem', function () {
         totalBorrows: "0",
       });
     });
+
+    it("work correctly with no orcle and interest rate model", async () => {
+      const mTokenP = await makeMToken({implementation: 'MErc20Delegate', supportMarket: true, exchangeRate});
+      await send(mTokenP.underlying, 'approve', [mTokenP._address, mintAmount], { from: minter });
+      await send(mTokenP.underlying, 'harnessSetBalance', [minter, mintAmount], { from: minter });
+
+      expect(await call(mTokenP, "interestRateModel")).toBeAddressZero();
+      expect(await call(mTokenP.momaPool, "oracle")).toBeAddressZero();
+      expect(await balanceOf(mTokenP.underlying, minter)).toEqualNumber(mintAmount);
+
+      expect(await send(mTokenP, 'mint', [mintAmount], { from: minter })).toSucceed();
+      expect(await balanceOf(mTokenP, minter)).toEqualNumber(mintTokens);
+      expect(await balanceOf(mTokenP.underlying, minter)).toEqualNumber(0);
+
+      expect(await send(mTokenP, 'redeem', [mintTokens], { from: minter })).toSucceed();
+      expect(await balanceOf(mTokenP, minter)).toEqualNumber(0);
+      expect(await balanceOf(mTokenP.underlying, minter)).toEqualNumber(mintAmount);
+    });
   });
 
   [redeemFreshTokens, redeemFreshAmount].forEach((redeemFresh) => {
