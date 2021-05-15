@@ -212,6 +212,7 @@ contract MomaFactory is MomaFactoryInterface, MomaFactoryStorage {
     /*** feeAdmin Functions ***/
     function setFeeAdmin(address _newFeeAdmin) external {
         require(msg.sender == feeAdmin, 'MomaFactory: feeAdmin check');
+        require(_newFeeAdmin != address(0), 'MomaFactory: newFeeAdmin check');
         address oldFeeAdmin = feeAdmin;
         feeAdmin = _newFeeAdmin;
         emit NewFeeAdmin(oldFeeAdmin, _newFeeAdmin);
@@ -219,6 +220,7 @@ contract MomaFactory is MomaFactoryInterface, MomaFactoryStorage {
 
     function setDefualtFeeReceiver(address payable _newFeeReceiver) external {
         require(msg.sender == feeAdmin, 'MomaFactory: feeAdmin check');
+        require(_newFeeReceiver != address(0), 'MomaFactory: newFeeReceiver check');
         address oldFeeReceiver = defualtFeeReceiver;
         defualtFeeReceiver = _newFeeReceiver;
         emit NewDefualtFeeReceiver(oldFeeReceiver, _newFeeReceiver);
@@ -251,6 +253,7 @@ contract MomaFactory is MomaFactoryInterface, MomaFactoryStorage {
     function setPoolFeeAdmin(address pool, address _newPoolFeeAdmin) external {
         PoolInfo storage info = pools[pool];
         require(msg.sender == info.poolFeeAdmin, 'MomaFactory: poolFeeAdmin check');
+        require(_newPoolFeeAdmin != address(0), 'MomaFactory: newPoolFeeAdmin check');
         address oldPoolFeeAdmin = info.poolFeeAdmin;
         info.poolFeeAdmin = _newPoolFeeAdmin;
         emit NewPoolFeeAdmin(pool, oldPoolFeeAdmin, _newPoolFeeAdmin);
@@ -259,6 +262,7 @@ contract MomaFactory is MomaFactoryInterface, MomaFactoryStorage {
     function setPoolFeeReceiver(address pool, address payable _newPoolFeeReceiver) external {
         PoolInfo storage info = pools[pool];
         require(msg.sender == info.poolFeeAdmin, 'MomaFactory: poolFeeAdmin check');
+        require(_newPoolFeeReceiver != address(0), 'MomaFactory: newPoolFeeReceiver check');
         address oldPoolFeeReceiver = info.poolFeeReceiver;
         info.poolFeeReceiver = _newPoolFeeReceiver;
         emit NewPoolFeeReceiver(pool, oldPoolFeeReceiver, _newPoolFeeReceiver);

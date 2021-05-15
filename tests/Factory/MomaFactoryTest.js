@@ -400,6 +400,12 @@ describe('MomaFactory', () => {
         ).rejects.toRevert('revert MomaFactory: feeAdmin check');
       });
 
+      it('should revert if newFeeAdmin is 0', async () => {
+        await expect(
+          send(proxy, 'setFeeAdmin', [address(0)])
+        ).rejects.toRevert('revert MomaFactory: newFeeAdmin check');
+      });
+
       it('should set newFeeAdmin correctly', async () => {
         expect(await call(proxy, 'feeAdmin')).toEqual(root);
         const tx = await send(proxy, 'setFeeAdmin', [a1]);
@@ -416,6 +422,12 @@ describe('MomaFactory', () => {
         await expect(
           send(proxy, 'setDefualtFeeReceiver', [a1], {from: a1})
         ).rejects.toRevert('revert MomaFactory: feeAdmin check');
+      });
+
+      it('should revert if newFeeReceiver is 0', async () => {
+        await expect(
+          send(proxy, 'setDefualtFeeReceiver', [address(0)])
+        ).rejects.toRevert('revert MomaFactory: newFeeReceiver check');
       });
 
       it('should set newDefualtFeeReceiver correctly', async () => {
@@ -513,6 +525,12 @@ describe('MomaFactory', () => {
         ).rejects.toRevert('revert MomaFactory: poolFeeAdmin check');
       });
 
+      it('should revert if newPoolFeeAdmin is 0', async () => {
+        await expect(
+          send(proxy, 'setPoolFeeAdmin', [momaPool._address, address(0)])
+        ).rejects.toRevert('revert MomaFactory: newPoolFeeAdmin check');
+      });
+
       it('should set newPoolFeeAdmin correctly', async () => {
         let poolInfo = await call(proxy, 'pools', [momaPool._address]);
         expect(poolInfo.poolFeeAdmin).toEqual(root);
@@ -532,6 +550,12 @@ describe('MomaFactory', () => {
         await expect(
           send(proxy, 'setPoolFeeReceiver', [momaPool._address, a1], {from: a1})
         ).rejects.toRevert('revert MomaFactory: poolFeeAdmin check');
+      });
+
+      it('should revert if newPoolFeeReceiver is 0', async () => {
+        await expect(
+          send(proxy, 'setPoolFeeReceiver', [momaPool._address, address(0)])
+        ).rejects.toRevert('revert MomaFactory: newPoolFeeReceiver check');
       });
 
       it('should set newPoolFeeReceiver correctly', async () => {
