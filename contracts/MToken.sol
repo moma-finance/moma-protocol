@@ -1153,30 +1153,6 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
     /*** Admin Functions ***/
 
     /**
-      * @notice Sets a new momaMaster for the market
-      * @dev Admin function to set a new momaMaster
-      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
-      */
-    function _setMomaMaster(MomaMasterInterface newMomaMaster) public returns (uint) {
-        // Check caller is admin
-        if (msg.sender != momaMaster.admin()) {
-            return fail(Error.UNAUTHORIZED, FailureInfo.SET_MOMAMASTER_OWNER_CHECK);
-        }
-
-        MomaMasterInterface oldMomaMaster = momaMaster;
-        // Ensure invoke momaMaster.isMomaMaster() returns true
-        require(newMomaMaster.isMomaMaster(), "marker method returned false");
-
-        // Set market's momaMaster to newMomaMaster
-        momaMaster = newMomaMaster;
-
-        // Emit NewMomaMaster(oldMomaMaster, newMomaMaster)
-        emit NewMomaMaster(oldMomaMaster, newMomaMaster);
-
-        return uint(Error.NO_ERROR);
-    }
-
-    /**
       * @notice Sets a new feeReceiver for the market
       * @dev Admin function to set a new feeReceiver
       * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
@@ -1355,9 +1331,9 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
         // Read the current moma fee admin and receiver from factory
         MomaFactoryInterface fct = factory();
         address momaFeeAdmin = fct.getMomaFeeAdmin(address(momaMaster));
-        // address payable momaFeeReceiver = fct.getMomaFeeReceiver(address(momaMaster));
+        address payable momaFeeReceiver = fct.getMomaFeeReceiver(address(momaMaster));
         // Check caller is momaFeeAdmin or momaFeeReceiver
-        if (msg.sender != momaFeeAdmin) {
+        if (msg.sender != momaFeeAdmin && msg.sender != momaFeeReceiver) {
             return fail(Error.UNAUTHORIZED, FailureInfo.COLLECT_MOMA_FEES_ADMIN_CHECK);
         }
         return _collectMomaFeesFresh(collectAmount);

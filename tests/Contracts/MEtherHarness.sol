@@ -225,6 +225,10 @@ contract MEtherDelegateHarness is MEtherDelegate {
         return borrowRateMaxMantissa;
     }
 
+    function harnessSetMomaMaster(MomaMasterInterface newMomaMaster) public {
+        momaMaster = newMomaMaster;
+    }
+
     function harnessSetBlockNumber(uint newBlockNumber) public {
         blockNumber = newBlockNumber;
     }

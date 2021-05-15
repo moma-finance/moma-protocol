@@ -271,6 +271,10 @@ contract MErc20DelegateHarness is MErc20Delegate {
         return borrowRateMaxMantissa;
     }
 
+    function harnessSetMomaMaster(MomaMasterInterface newMomaMaster) public {
+        momaMaster = newMomaMaster;
+    }
+
     function harnessSetBlockNumber(uint newBlockNumber) public {
         blockNumber = newBlockNumber;
     }

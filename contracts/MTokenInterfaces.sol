@@ -264,7 +264,6 @@ contract MTokenInterface is MTokenStorage {
 
     /*** Admin Functions ***/
 
-    function _setMomaMaster(MomaMasterInterface newMomaMaster) public returns (uint);
     function _setFeeReceiver(address payable newFeeReceiver) public returns (uint);
     function _setFeeFactor(uint newFeeFactorMantissa) external returns (uint);
     function _collectFees(uint collectAmount) external returns (uint);

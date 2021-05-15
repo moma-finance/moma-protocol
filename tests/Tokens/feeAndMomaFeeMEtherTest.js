@@ -340,7 +340,7 @@ describe('#MEther/feeAndMomaFee', function () {
           a1Ether = await etherBalance(a1);
         });
 
-        it("should work for -1 collectAmount", async () => {
+        it("should work for -1 collectAmount by momaFeeAdmin", async () => {
           const result = await send(mToken, '_collectMomaFees', [UInt256Max()], {from: root});
           expect(await call(mToken, 'totalMomaFees')).toEqualNumber(0);
           expect(await etherBalance(a1)).toEqualNumber(a1Ether.plus(momaFee));
@@ -352,10 +352,11 @@ describe('#MEther/feeAndMomaFee', function () {
           });
         });
 
-        it("should work for collectAmount", async () => {
-          const result = await send(mToken, '_collectMomaFees', [momaFee], {from: root});
+        it("should work for collectAmount by momaFeeReceiver", async () => {
+          expect(await call(mToken.momaPool.factory, 'getMomaFeeReceiver', [mToken.momaPool._address])).toEqual(a1);
+          const result = await send(mToken, '_collectMomaFees', [momaFee], {from: a1});
           expect(await call(mToken, 'totalMomaFees')).toEqualNumber(0);
-          expect(await etherBalance(a1)).toEqualNumber(a1Ether.plus(momaFee));
+          expect(await etherBalance(a1)).toEqualNumber(a1Ether.plus(momaFee).minus(await etherGasCost(result)));
           expect(result).toSucceed();
           expect(result).toHaveLog('MomaFeesCollected', {
             momaFeeReceiver: a1,

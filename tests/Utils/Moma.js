@@ -269,7 +269,7 @@ async function makeMToken(opts = {}) {
   if (opts.boolMomaMaster) {
     let boolMomaMaster = await deploy('BoolMomaMaster', [momaPool.factory._address]);
     await send(momaPool.factory, '_setMomaMaster', [boolMomaMaster._address]);
-    await send(mToken, '_setMomaMaster', [boolMomaMaster._address]);
+    await send(mToken, 'harnessSetMomaMaster', [boolMomaMaster._address]);
     Object.assign(boolMomaMaster, { priceOracle: momaPool.priceOracle, factory: momaPool.factory, momaMaster: momaPool.momaMaster });
     momaPool = boolMomaMaster;
   }

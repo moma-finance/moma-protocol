@@ -336,7 +336,7 @@ describe('#MErc20/feeAndMomaFee', function () {
           expect(await balanceOf(mToken.underlying, a1)).toEqualNumber(0);
         });
 
-        it("should work for -1 collectAmount", async () => {
+        it("should work for -1 collectAmount by momaFeeAdmin", async () => {
           const result = await send(mToken, '_collectMomaFees', [UInt256Max()], {from: root});
           expect(await call(mToken, 'totalMomaFees')).toEqualNumber(0);
           expect(await balanceOf(mToken.underlying, a1)).toEqualNumber(1);
@@ -348,8 +348,9 @@ describe('#MErc20/feeAndMomaFee', function () {
           });
         });
 
-        it("should work for 1 collectAmount", async () => {
-          const result = await send(mToken, '_collectMomaFees', [1], {from: root});
+        it("should work for 1 collectAmount by momaFeeReceiver", async () => {
+          expect(await call(mToken.momaPool.factory, 'getMomaFeeReceiver', [mToken.momaPool._address])).toEqual(a1);
+          const result = await send(mToken, '_collectMomaFees', [1], {from: a1});
           expect(await call(mToken, 'totalMomaFees')).toEqualNumber(0);
           expect(await balanceOf(mToken.underlying, a1)).toEqualNumber(1);
           expect(result).toSucceed();
