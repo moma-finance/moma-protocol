@@ -145,7 +145,7 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
             return Error.PRICE_ERROR;
         }
 
-        if (marketToJoin.accountMembership[borrower] == true) {
+        if (marketToJoin.accountMembership[borrower]) {
             // already joined
             return Error.NO_ERROR;
         }
@@ -338,7 +338,7 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
      * @return 0 if the borrow is allowed, otherwise a semi-opaque error code (See ErrorReporter.sol)
      */
     function borrowAllowed(address mToken, address borrower, uint borrowAmount) external returns (uint) {
-        require(isLendingPool == true, "this is not lending pool");
+        require(isLendingPool, "this is not lending pool");
         // Pausing is a very serious situation - we revert to sound the alarms
         require(!borrowGuardianPaused[mToken], "borrow is paused");
 
@@ -424,7 +424,7 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
         payer;
         borrower;
         repayAmount;
-        require(isLendingPool == true, "this is not lending pool");
+        require(isLendingPool, "this is not lending pool");
 
         if (!markets[mToken].isListed) {
             return uint(Error.MARKET_NOT_LISTED);
@@ -480,7 +480,7 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
         uint repayAmount) external returns (uint) {
         // Shh - currently unused
         liquidator;
-        require(isLendingPool == true, "this is not lending pool");
+        require(isLendingPool, "this is not lending pool");
 
         if (!markets[mTokenBorrowed].isListed || !markets[mTokenCollateral].isListed) {
             return uint(Error.MARKET_NOT_LISTED);
@@ -550,7 +550,7 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
         uint seizeTokens) external returns (uint) {
         // Pausing is a very serious situation - we revert to sound the alarms
         require(!seizeGuardianPaused, "seize is paused");
-        require(isLendingPool == true, "this is not lending pool");
+        require(isLendingPool, "this is not lending pool");
 
         // Shh - currently unused
         seizeTokens;
@@ -943,13 +943,13 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
         }
 
         // Check is mToken
-        require(MomaFactoryInterface(factory).isMToken(address(mToken)) == true, 'not mToken');
+        require(MomaFactoryInterface(factory).isMToken(address(mToken)), 'not mToken');
 
         if (markets[address(mToken)].isListed) {
             return fail(Error.MARKET_ALREADY_LISTED, FailureInfo.SUPPORT_MARKET_EXISTS);
         }
 
-        mToken.isMToken(); // Sanity check to make sure its really a MToken
+        require(mToken.isMToken(), 'not mToken contract'); // Sanity check to make sure its really a MToken
 
         // Note that isMomaed is not in active use anymore
         // markets[address(mToken)] = Market({isListed: true, isMomaed: false, collateralFactorMantissa: 0});
@@ -995,7 +995,7 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
      * @param newPauseGuardian The address of the new Pause Guardian
      * @return uint 0=success, otherwise a failure. (See enum Error for details)
      */
-    function _setPauseGuardian(address newPauseGuardian) public returns (uint) {
+    function _setPauseGuardian(address newPauseGuardian) external returns (uint) {
         if (msg.sender != admin) {
             return fail(Error.UNAUTHORIZED, FailureInfo.SET_PAUSE_GUARDIAN_OWNER_CHECK);
         }
@@ -1012,7 +1012,7 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
         return uint(Error.NO_ERROR);
     }
 
-    function _upgradeLendingPool() public returns (bool) {
+    function _upgradeLendingPool() external returns (bool) {
         require(msg.sender == admin, "only admin can upgrade");
 
         // must update oracle first, it succuss or revert, so no need to check again
@@ -1026,52 +1026,52 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
         }
 
         bool state = MomaFactoryInterface(factory).upgradeLendingPool();
-        if (state == true) {
+        if (state) {
             require(updateBorrowBlock() == 0, "update borrow block error");
             isLendingPool = true;
         }
         return state;
     }
 
-    function _setMintPaused(MToken mToken, bool state) public returns (bool) {
+    function _setMintPaused(MToken mToken, bool state) external returns (bool) {
         require(markets[address(mToken)].isListed, "cannot pause a market that is not listed");
         require(msg.sender == pauseGuardian || msg.sender == admin, "only pause guardian and admin can pause");
-        require(msg.sender == admin || state == true, "only admin can unpause");
+        require(msg.sender == admin || state, "only admin can unpause");
 
         mintGuardianPaused[address(mToken)] = state;
         emit ActionPaused(mToken, "Mint", state);
         return state;
     }
 
-    function _setBorrowPaused(MToken mToken, bool state) public returns (bool) {
+    function _setBorrowPaused(MToken mToken, bool state) external returns (bool) {
         require(markets[address(mToken)].isListed, "cannot pause a market that is not listed");
         require(msg.sender == pauseGuardian || msg.sender == admin, "only pause guardian and admin can pause");
-        require(msg.sender == admin || state == true, "only admin can unpause");
+        require(msg.sender == admin || state, "only admin can unpause");
 
         borrowGuardianPaused[address(mToken)] = state;
         emit ActionPaused(mToken, "Borrow", state);
         return state;
     }
 
-    function _setTransferPaused(bool state) public returns (bool) {
+    function _setTransferPaused(bool state) external returns (bool) {
         require(msg.sender == pauseGuardian || msg.sender == admin, "only pause guardian and admin can pause");
-        require(msg.sender == admin || state == true, "only admin can unpause");
+        require(msg.sender == admin || state, "only admin can unpause");
 
         transferGuardianPaused = state;
         emit ActionPaused("Transfer", state);
         return state;
     }
 
-    function _setSeizePaused(bool state) public returns (bool) {
+    function _setSeizePaused(bool state) external returns (bool) {
         require(msg.sender == pauseGuardian || msg.sender == admin, "only pause guardian and admin can pause");
-        require(msg.sender == admin || state == true, "only admin can unpause");
+        require(msg.sender == admin || state, "only admin can unpause");
 
         seizeGuardianPaused = state;
         emit ActionPaused("Seize", state);
         return state;
     }
 
-    function _become(MomaPool momaPool) public {
+    function _become(MomaPool momaPool) external {
         require(msg.sender == momaPool.admin(), "only momaPool admin can change brains");
         require(momaPool._acceptImplementation() == 0, "change not authorized");
     }
@@ -1224,7 +1224,7 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
      * @param suppliers Whether or not to distribute token earned by supplying
      * @param borrowers Whether or not to distribute token earned by borrowing
      */
-    function dclaim(address token, bool suppliers, bool borrowers) public {
+    function dclaim(address token, bool suppliers, bool borrowers) external {
         delegateToFarming(abi.encodeWithSignature("dclaim(address,bool,bool)", token, suppliers, borrowers));
     }
 
@@ -1243,7 +1243,7 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
      * @param suppliers Whether or not to distribute token earned by supplying
      * @param borrowers Whether or not to distribute token earned by borrowing
      */
-    function dclaim(bool suppliers, bool borrowers) public {
+    function dclaim(bool suppliers, bool borrowers) external {
         delegateToFarming(abi.encodeWithSignature("dclaim(bool,bool)", suppliers, borrowers));
     }
 
@@ -1251,14 +1251,14 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
      * @notice Claim all the token have been distributed to user of specified token
      * @param token The token to claim
      */
-    function claim(address token) public {
+    function claim(address token) external {
         delegateToFarming(abi.encodeWithSignature("claim(address)", token));
     }
 
     /**
      * @notice Claim all the token have been distributed to user of all tokens
      */
-    function claim() public {
+    function claim() external {
         delegateToFarming(abi.encodeWithSignature("claim()"));
     }
 
@@ -1300,7 +1300,7 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
      * @param recipient The address of the recipient to transfer token to
      * @param amount The amount of token to (possibly) transfer
      */
-    function _grantToken(address token, address recipient, uint amount) public {
+    function _grantToken(address token, address recipient, uint amount) external {
         delegateToFarming(abi.encodeWithSignature("_grantToken(address,address,uint256)", token, recipient, amount));
     }
 
@@ -1312,7 +1312,7 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
       * @param end Block heiht to stop farming
       * @return uint 0=success, otherwise a failure
       */
-    function _setTokenFarm(EIP20Interface token, uint start, uint end) public returns (uint) {
+    function _setTokenFarm(EIP20Interface token, uint start, uint end) external returns (uint) {
         bytes memory data = delegateToFarming(abi.encodeWithSignature("_setTokenFarm(address,uint256,uint256)", token, start, end));
         return abi.decode(data, (uint));
     }
@@ -1376,7 +1376,7 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
      * @dev The automatic getter may be used to access an individual token.
      * @return The list of market addresses
      */
-    function getAllTokens() public view returns (address[] memory) {
+    function getAllTokens() external view returns (address[] memory) {
         return allTokens;
     }
 
@@ -1386,7 +1386,7 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
      * @param market Which market
      * @return Wether this market farm the token currently
      */
-    function isFarming(address token, address market) public view returns (bool) {
+    function isFarming(address token, address market) external view returns (bool) {
         uint blockNumber = getBlockNumber();
         TokenFarmState storage state = farmStates[token];
         return state.speeds[market] > 0 && blockNumber > uint(state.startBlock) && blockNumber <= uint(state.endBlock);
@@ -1427,7 +1427,7 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
      * @param token The token address to ask for
      * @return The list of market addresses
      */
-    function getTokenMarkets(address token) public view returns (MToken[] memory) {
+    function getTokenMarkets(address token) external view returns (MToken[] memory) {
         return farmStates[token].tokenMarkets;
     }
 
@@ -1436,7 +1436,7 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
      * @dev The automatic getter may be used to access an individual market.
      * @return The list of market addresses
      */
-    function getAllMarkets() public view returns (MToken[] memory) {
+    function getAllMarkets() external view returns (MToken[] memory) {
         return allMarkets;
     }
 

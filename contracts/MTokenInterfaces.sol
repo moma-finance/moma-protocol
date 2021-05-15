@@ -264,13 +264,13 @@ contract MTokenInterface is MTokenStorage {
 
     /*** Admin Functions ***/
 
-    function _setFeeReceiver(address payable newFeeReceiver) public returns (uint);
+    function _setFeeReceiver(address payable newFeeReceiver) external returns (uint);
     function _setFeeFactor(uint newFeeFactorMantissa) external returns (uint);
     function _collectFees(uint collectAmount) external returns (uint);
     function _collectMomaFees(uint collectAmount) external returns (uint);
     function _setReserveFactor(uint newReserveFactorMantissa) external returns (uint);
     function _reduceReserves(uint reduceAmount) external returns (uint);
-    function _setInterestRateModel(InterestRateModel newInterestRateModel) public returns (uint);
+    function _setInterestRateModel(InterestRateModel newInterestRateModel) external returns (uint);
 }
 
 contract MErc20Storage {

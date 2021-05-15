@@ -22,6 +22,10 @@ describe('MToken', function () {
       await expect(makeMToken({ underlying: { _address: root } })).rejects.toRevert("revert");
     });
 
+    it("fails when 0 feeReceiver", async () => {
+      await expect(makeMToken({ feeReceiver: address(0) })).rejects.toRevert("revert feeReceiver is zero address");
+    });
+
     it("fails when 0 initial exchange rate", async () => {
       await expect(makeMToken({ exchangeRate: 0 })).rejects.toRevert("revert initial exchange rate must be greater than zero.");
     });

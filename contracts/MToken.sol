@@ -32,6 +32,7 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
                         address payable feeReceiver_) public {
         require(msg.sender == momaMaster_.admin(), "only admin may initialize the market");
         require(initialExchangeRateMantissa == 0, "market may only be initialized once");
+        require(feeReceiver_ != address(0), "feeReceiver is zero address");
 
         // Set initial exchange rate
         initialExchangeRateMantissa = initialExchangeRateMantissa_;
@@ -1157,7 +1158,7 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
       * @dev Admin function to set a new feeReceiver
       * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
       */
-    function _setFeeReceiver(address payable newFeeReceiver) public returns (uint) {
+    function _setFeeReceiver(address payable newFeeReceiver) external returns (uint) {
         // Check caller is admin
         if (msg.sender != momaMaster.admin()) {
             return fail(Error.UNAUTHORIZED, FailureInfo.SET_FEE_RECEIVER_OWNER_CHECK);
@@ -1573,7 +1574,7 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
      * @param newInterestRateModel the new interest rate model to use
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
-    function _setInterestRateModel(InterestRateModel newInterestRateModel) public returns (uint) {
+    function _setInterestRateModel(InterestRateModel newInterestRateModel) external returns (uint) {
         uint error = accrueInterest();
         if (error != uint(Error.NO_ERROR)) {
             // accrueInterest emits logs on errors, but on top of that we want to log the fact that an attempted change of interest rate model failed
