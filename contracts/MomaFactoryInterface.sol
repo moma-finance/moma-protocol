@@ -10,6 +10,7 @@ interface MomaFactoryInterface {
     event NewDefualtFeeFactor(uint oldFeeFactor, uint newFeeFactor);
     event NewNoFeeTokenStatus(address token, bool oldNoFeeTokenStatus, bool newNoFeeTokenStatus);
     event NewTokenFeeFactor(address token, uint oldFeeFactor, uint newFeeFactor);
+    event NewOracle(address oldOracle, address newOracle);
     event NewTimelock(address oldTimelock, address newTimelock);
     event NewMomaMaster(address oldMomaMaster, address newMomaMaster);
     event NewMEther(address oldMEther, address newMEther);
@@ -23,6 +24,7 @@ interface MomaFactoryInterface {
     event NewPoolFeeStatus(address pool, bool oldPoolFeeStatus, bool newPoolFeeStatus);
 
     function isMomaFactory() external view returns (bool);
+    function oracle() external view returns (address);
     function momaFarming() external view returns (address);
     function farmingDelegate() external view returns (address);
     function mEtherImplementation() external view returns (address);

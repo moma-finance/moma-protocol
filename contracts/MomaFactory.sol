@@ -4,6 +4,7 @@ import "./MomaMaster.sol";
 import "./MomaPool.sol";
 import "./MomaFactoryInterface.sol";
 import "./MomaFactoryProxy.sol";
+import "./PriceOracle.sol";
 
 
 contract MomaFactory is MomaFactoryInterface, MomaFactoryStorage {
@@ -139,6 +140,14 @@ contract MomaFactory is MomaFactoryInterface, MomaFactoryStorage {
         address oldDelegate = farmingDelegate;
         farmingDelegate = newDelegate;
         emit NewFarmingDelegate(oldDelegate, newDelegate);
+    }
+
+    function _setOracle(address newOracle) external {
+        require(msg.sender == admin, 'MomaFactory: admin check');
+        require(PriceOracle(newOracle).isPriceOracle(), 'MomaFactory: newOracle check');
+        address oldOracle = oracle;
+        oracle = newOracle;
+        emit NewOracle(oldOracle, newOracle);
     }
 
     function _setTimelock(address newTimelock) external {

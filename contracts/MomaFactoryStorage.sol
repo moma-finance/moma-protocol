@@ -18,6 +18,7 @@ contract MomaFactoryStorage is MomaFactoryProxyStorage {
     address public momaFarming;
     address public farmingDelegate;
 
+    address public oracle;
     address public timelock;
     address public momaMaster;
     address public mEther;

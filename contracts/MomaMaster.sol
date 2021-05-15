@@ -820,20 +820,26 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
       * @dev Admin function to set a new price oracle
       * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
       */
-    function _setPriceOracle(PriceOracle newOracle) public returns (uint) {
+    function _updatePriceOracle() public returns (uint) {
         // Check caller is admin
         if (msg.sender != admin) {
             return fail(Error.UNAUTHORIZED, FailureInfo.SET_PRICE_ORACLE_OWNER_CHECK);
         }
 
+        // Read the new oracle from factory
+        address newOracle = MomaFactoryInterface(factory).oracle();
+
+        // Check newOracle
+        require(newOracle != address(0), "factory not set oracle");
+
         // Track the old oracle for the MomaMaster
         PriceOracle oldOracle = oracle;
 
         // Set MomaMaster's oracle to newOracle
-        oracle = newOracle;
+        oracle = PriceOracle(newOracle);
 
         // Emit NewPriceOracle(oldOracle, newOracle)
-        emit NewPriceOracle(oldOracle, newOracle);
+        emit NewPriceOracle(oldOracle, PriceOracle(newOracle));
 
         return uint(Error.NO_ERROR);
     }
@@ -1009,8 +1015,8 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
     function _upgradeLendingPool() public returns (bool) {
         require(msg.sender == admin, "only admin can upgrade");
 
-        // must set oracle first
-        require(address(oracle) != address(0), "oracle not set");
+        // must update oracle first, it succuss or revert, so no need to check again
+        _updatePriceOracle();
 
         // all markets must set interestRateModel
         for (uint i = 0; i < allMarkets.length; i++) {

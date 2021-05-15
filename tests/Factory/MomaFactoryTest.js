@@ -141,6 +141,38 @@ describe('MomaFactory', () => {
       });
     });
 
+    describe('_setOracle', () => {
+      it('should revert if not called by admin', async () => {
+        await expect(
+          send(proxy, '_setOracle', [a1], {from: a1})
+        ).rejects.toRevert('revert MomaFactory: admin check');
+      });
+
+      it('should revert if newOracle have no isPriceOracle', async () => {
+        await expect(
+          send(proxy, '_setOracle', [a1])
+        ).rejects.toRevert('revert');
+      });
+
+      it('should revert if newOracle isPriceOracle return false', async () => {
+        const newOracle = await deploy('FalsePriceOracle');
+        await expect(
+          send(proxy, '_setOracle', [newOracle._address])
+        ).rejects.toRevert('revert MomaFactory: newOracle check');
+      });
+
+      it('should set newOracle correctly', async () => {
+        const newOracle = await deploy('SimplePriceOracle');
+        expect(await call(proxy, 'oracle')).toBeAddressZero();
+        const tx = await send(proxy, '_setOracle', [newOracle._address]);
+        expect(await call(proxy, 'oracle')).toEqual(newOracle._address);
+        expect(tx).toHaveLog('NewOracle', {
+          oldOracle: address(0),
+          newOracle: newOracle._address
+        });
+      });
+    });
+
     describe('_setTimelock()', () => {
       it('should revert if not called by admin', async () => {
         await expect(
@@ -628,7 +660,7 @@ describe('MomaFactory', () => {
         const momaMaster = await deploy('MomaMaster');
         Object.assign(proxy, { momaMaster });
         await send(proxy, '_setMomaMaster', [momaMaster._address]);
-        momaPool = await makeMomaPool({factory: proxy, addPriceOracle: true});
+        momaPool = await makeMomaPool({factory: proxy});
         pool = momaPool._address, underlying = a1;
       });
 

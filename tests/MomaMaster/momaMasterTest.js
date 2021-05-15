@@ -36,39 +36,36 @@ describe('MomaMaster', () => {
     });
   });
 
-  describe('_setPriceOracle', () => {
+  describe('_updatePriceOracle', () => {
     let momaPool, oldOracle, newOracle;
     beforeEach(async () => {
       momaPool = await makeMomaPool({addPriceOracle: true});
       oldOracle = momaPool.priceOracle;
-      newOracle = await makePriceOracle();
     });
 
     it("fails if called by non-admin", async () => {
       expect(
-        await send(momaPool, '_setPriceOracle', [newOracle._address], {from: accounts[0]})
+        await send(momaPool, '_updatePriceOracle', {from: accounts[0]})
       ).toHaveTrollFailure('UNAUTHORIZED', 'SET_PRICE_ORACLE_OWNER_CHECK');
       expect(await momaPool.methods.oracle().call()).toEqual(oldOracle._address);
     });
 
-    it.skip("reverts if passed a contract that doesn't implement isPriceOracle", async () => {
-      await expect(send(momaPool, '_setPriceOracle', [momaPool._address])).rejects.toRevert();
-      expect(await call(momaPool, 'oracle')).toEqual(oldOracle._address);
-    });
-
-    it.skip("reverts if passed a contract that implements isPriceOracle as false", async () => {
-      newOracle = await makePriceOracle({kind: 'false'});
-      await expect(send(momaPool, '_setPriceOracle', [newOracle._address])).rejects.toRevert("revert oracle method isPriceOracle returned false");
-      expect(await call(momaPool, 'oracle')).toEqual(oldOracle._address);
+    it("reverts if factory not set oracle", async () => {
+      momaPool = await makeMomaPool();
+      await expect(send(momaPool, '_updatePriceOracle')).rejects.toRevert("revert factory not set oracle");
+      expect(await call(momaPool, 'oracle')).toBeAddressZero();
     });
 
     it("accepts a valid price oracle and emits a NewPriceOracle event", async () => {
-      const result = await send(momaPool, '_setPriceOracle', [newOracle._address]);
+      newOracle = await makePriceOracle();
+      await send(momaPool.factory, '_setOracle', [newOracle._address]);
+      const result = await send(momaPool, '_updatePriceOracle');
       expect(result).toSucceed();
       expect(result).toHaveLog('NewPriceOracle', {
         oldPriceOracle: oldOracle._address,
         newPriceOracle: newOracle._address
       });
+      expect(newOracle._address).not.toEqual(oldOracle._address);
       expect(await call(momaPool, 'oracle')).toEqual(newOracle._address);
     });
   });
@@ -225,7 +222,7 @@ describe('MomaMaster', () => {
     let momaPool, mToken;
 
     beforeEach(async () => {
-      momaPool = await makeMomaPool({kind: 'harness', addFarmingDelegate: true, addMomaFarming: true});
+      momaPool = await makeMomaPool({kind: 'harness', addFarmingDelegate: true, addMomaFarming: true, addPriceOracle: true});
     });
 
     it('should revert if not called by admin', async () => {
@@ -235,15 +232,14 @@ describe('MomaMaster', () => {
     });
 
     it('should revert if not set oracle', async () => {
+      momaPool = await makeMomaPool({kind: 'harness', addFarmingDelegate: true, addMomaFarming: true});
       await expect(
         send(momaPool, '_upgradeLendingPool')
-      ).rejects.toRevert('revert oracle not set');
+      ).rejects.toRevert('revert factory not set oracle');
     });
 
     it('should revert if market not set interestRateModel', async () => {
       mToken = await makeMToken({momaPool, supportMarket: true});
-      const newOracle = await makePriceOracle();
-      await send(momaPool, '_setPriceOracle', [newOracle._address]);
       await send(momaPool.factory, '_setAllowUpgrade', [true]);
       await expect(
         send(momaPool, '_upgradeLendingPool')
@@ -252,8 +248,6 @@ describe('MomaMaster', () => {
 
     it('should upgrade correctly', async () => {
       mToken = await makeMToken({momaPool, implementation: 'MErc20DelegateHarness', supportMarket: true});
-      const newOracle = await makePriceOracle();
-      await send(momaPool, '_setPriceOracle', [newOracle._address]);
       await send(momaPool.factory, '_setAllowUpgrade', [true]);
       await setInterestRateModel(mToken);
       token = await makeToken({symbol: 'TOKEN'});
@@ -275,8 +269,6 @@ describe('MomaMaster', () => {
 
     it('should revert if upgrade again', async () => {
       mToken = await makeMToken({momaPool, implementation: 'MErc20DelegateHarness', supportMarket: true});
-      const newOracle = await makePriceOracle();
-      await send(momaPool, '_setPriceOracle', [newOracle._address]);
       await send(momaPool.factory, '_setAllowUpgrade', [true]);
       await setInterestRateModel(mToken);
 
@@ -288,8 +280,6 @@ describe('MomaMaster', () => {
 
     it('should upgrade correctly if blockNumber less than startBlock', async () => {
       mToken = await makeMToken({momaPool, implementation: 'MErc20DelegateHarness', supportMarket: true});
-      const newOracle = await makePriceOracle();
-      await send(momaPool, '_setPriceOracle', [newOracle._address]);
       await send(momaPool.factory, '_setAllowUpgrade', [true]);
       await setInterestRateModel(mToken);
       token = await makeToken({symbol: 'TOKEN'});

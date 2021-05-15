@@ -47,7 +47,7 @@ async function makeFactory(opts = {}) {
     kind = 'proxy'
   } = opts || {};
 
-  let momaMaster, farmingDelegate, momaFarming;
+  let momaMaster, priceOracle, farmingDelegate, momaFarming;
 
   if (kind == 'proxy') {
     const proxy = opts.proxy || await deploy('MomaFactoryProxy');
@@ -60,6 +60,11 @@ async function makeFactory(opts = {}) {
     if (addMomaMaster) {
       momaMaster = opts.momaMaster || await deploy('MomaMaster');
       await send(proxy, '_setMomaMaster', [momaMaster._address]);
+    }
+
+    if (opts.addPriceOracle) {
+      priceOracle = opts.priceOracle || await makePriceOracle(opts.priceOracleOpts);
+      await send(proxy, '_setOracle', [priceOracle._address]);
     }
 
     if (opts.addMErc20) {
@@ -82,7 +87,7 @@ async function makeFactory(opts = {}) {
       await send(proxy, '_setMomaFarming', [momaFarming._address]);
     }
 
-    return Object.assign(proxy, { momaMaster, farmingDelegate, momaFarming });
+    return Object.assign(proxy, { momaMaster, priceOracle, farmingDelegate, momaFarming });
   }
 }
 
@@ -109,17 +114,6 @@ async function makeMomaPool(opts = {}) {
     return await deploy('FalseMarkerMethodMomaMaster');
   }
 
-  if (kind == 'v1-no-proxy') {
-    const momaPool = await deploy('MomaMasterHarness');
-    priceOracle = opts.priceOracle || await makePriceOracle(opts.priceOracleOpts);
-    const closeFactor = etherMantissa(dfn(opts.closeFactor, .051));
-
-    await send(momaPool, '_setCloseFactor', [closeFactor]);
-    await send(momaPool, '_setPriceOracle', [priceOracle._address]);
-
-    return Object.assign(momaPool, { priceOracle });
-  }
-
   if (opts.addFarmingDelegate) {
     opts.factoryOpts = opts.factoryOpts || {};
     Object.assign(opts.factoryOpts, { addFarmingDelegate: true});
@@ -130,31 +124,15 @@ async function makeMomaPool(opts = {}) {
     Object.assign(opts.factoryOpts, { addMomaFarming: true});
   }
 
+  if (opts.addPriceOracle) {
+    opts.factoryOpts = opts.factoryOpts || {};
+    Object.assign(opts.factoryOpts, { addPriceOracle: true});
+  }
+
   if (!opts.factory) {
     momaMaster = opts.momaMaster || await deploy(contractNameMapping[kind]);
     opts.factoryOpts = opts.factoryOpts || {};
     Object.assign(opts.factoryOpts, { momaMaster});
-  }
-
-  if (kind == 'unitroller-g6') {
-    const unitroller = opts.unitroller || await deploy('Unitroller');
-    const comptroller = await deploy('ComptrollerScenarioG6');
-    priceOracle = opts.priceOracle || await makePriceOracle(opts.priceOracleOpts);
-    const closeFactor = etherMantissa(dfn(opts.closeFactor, .051));
-    const liquidationIncentive = etherMantissa(1);
-    const comp = opts.comp || await deploy('Comp', [opts.compOwner || root]);
-    const compRate = etherUnsigned(dfn(opts.compRate, 1e18));
-
-    await send(unitroller, '_setPendingImplementation', [comptroller._address]);
-    await send(comptroller, '_become', [unitroller._address]);
-    mergeInterface(unitroller, comptroller);
-    await send(unitroller, '_setLiquidationIncentive', [liquidationIncentive]);
-    await send(unitroller, '_setCloseFactor', [closeFactor]);
-    await send(unitroller, '_setPriceOracle', [priceOracle._address]);
-    await send(unitroller, '_setCompRate', [compRate]);
-    await send(unitroller, 'setCompAddress', [comp._address]); // harness only
-
-    return Object.assign(unitroller, { priceOracle, comp });
   }
 
   const factory = opts.factory || await makeFactory(opts.factoryOpts);
@@ -166,8 +144,8 @@ async function makeMomaPool(opts = {}) {
   mergeInterface(momaPool, momaMaster);
 
   if (opts.addPriceOracle) {
-      priceOracle = opts.priceOracle || await makePriceOracle(opts.priceOracleOpts);
-      await send(momaPool, '_setPriceOracle', [priceOracle._address]);
+    priceOracle = factory.priceOracle || await setPriceOracle(factory);
+    await send(momaPool, '_updatePriceOracle');
   }
 
   const closeFactor = etherMantissa(dfn(opts.closeFactor, .051));
@@ -337,10 +315,7 @@ async function setInterestRateModel(mToken, opts = {}, model = null) {
 }
 
 async function upgradeLendingPool(momaPool, mTokens = null) {
-  if (await call(momaPool, 'oracle') == address(0)) {
-    const priceOracle = await makePriceOracle();
-    await send(momaPool, '_setPriceOracle', [priceOracle._address]);
-  }
+  await setPriceOracle(momaPool.factory);
   
   mTokens = mTokens || await Promise.all((await call(momaPool, 'getAllMarkets')).map(async (c) => await saddle.getContractAt('MErc20DelegateHarness', c)));
   let interestRateModel;
@@ -372,6 +347,14 @@ async function makePriceOracle(opts = {}) {
 
   if (kind == 'false') {
     return await deploy('FalsePriceOracle');
+  }
+}
+
+async function setPriceOracle(factory) {
+  if (await call(factory, 'oracle') == address(0)) {
+    const oracle = await makePriceOracle();
+    await send(factory, '_setOracle', [oracle._address]);
+    return oracle;
   }
 }
 
