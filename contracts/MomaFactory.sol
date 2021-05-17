@@ -10,7 +10,7 @@ import "./PriceOracle.sol";
 contract MomaFactory is MomaFactoryInterface, MomaFactoryStorage {
 
     bool public constant isMomaFactory = true;
-    uint public constant feeFactorMaxMantissa = 1e18;
+    uint public constant feeFactorMaxMantissa = 0.5e18;
 
     function createPool() external returns (address pool) {
         bytes memory bytecode = type(MomaPool).creationCode;

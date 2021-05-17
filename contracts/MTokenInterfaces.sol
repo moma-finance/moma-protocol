@@ -33,12 +33,12 @@ contract MTokenStorage {
     /**
      * @notice Maximum fraction of interest that can be set aside for fees
      */
-    uint internal constant feeFactorMaxMantissa = 1e18;
+    uint internal constant feeFactorMaxMantissa = 0.5e18;
 
     /**
      * @notice Maximum fraction of interest that can be set aside for moma fees
      */
-    uint internal constant momaFeeFactorMaxMantissa = 1e18;
+    uint internal constant momaFeeFactorMaxMantissa = 0.5e18;
 
     /**
      * @notice Maximum fraction of interest that can be set aside for reserves

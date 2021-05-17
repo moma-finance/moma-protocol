@@ -103,7 +103,7 @@ describe('#MErc20/feeAndMomaFee', function () {
 
       it("fails if newFeeFactorMantissa > feeFactorMaxMantissa", async () => {
         expect(
-          await send(mToken, '_setFeeFactor', [etherMantissa(2)])
+          await send(mToken, '_setFeeFactor', [etherMantissa(0.51)])
         ).toHaveTokenFailure('BAD_INPUT', 'SET_FEE_FACTOR_BOUNDS_CHECK');
         expect(await call(mToken, 'feeFactorMantissa')).toEqualNumber(etherMantissa(0.1));
       });

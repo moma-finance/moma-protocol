@@ -450,7 +450,7 @@ describe('MomaFactory', () => {
 
       it('should revert if newFeeFactor > feeFactorMaxMantissa', async () => {
         await expect(
-          send(proxy, 'setDefualtFeeFactor', [etherExp(1.1)])
+          send(proxy, 'setDefualtFeeFactor', [etherExp(0.51)])
         ).rejects.toRevert('revert MomaFactory: newFeeFactor bound check');
       });
 
@@ -493,7 +493,7 @@ describe('MomaFactory', () => {
 
       it('should revert if newFeeFactor > feeFactorMaxMantissa', async () => {
         await expect(
-          send(proxy, 'setTokenFeeFactor', [a1, etherExp(1.1)])
+          send(proxy, 'setTokenFeeFactor', [a1, etherExp(0.51)])
         ).rejects.toRevert('revert MomaFactory: newFeeFactor bound check');
       });
 
@@ -581,7 +581,7 @@ describe('MomaFactory', () => {
 
       it('should revert if newFeeFactor > feeFactorMaxMantissa', async () => {
         await expect(
-          send(proxy, 'setPoolFeeFactor', [momaPool._address, etherExp(1.1)])
+          send(proxy, 'setPoolFeeFactor', [momaPool._address, etherExp(0.51)])
         ).rejects.toRevert('revert MomaFactory: newFeeFactor bound check');
       });
 
