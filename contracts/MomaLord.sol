@@ -191,9 +191,8 @@ contract MomaLord {
         uint claimed = amount.sub(notClaimed);
         if (claimed > 0) {
             ClaimState storage state = accounts[msg.sender][uint(accountType)];
-            uint oldClaimed = state.claimed;
-            state.claimed = oldClaimed.add(claimed);
-            require(state.claimed > oldClaimed && state.claimed <= state.total, 'claimed amount unexpect error');
+            state.claimed = state.claimed.add(claimed);
+            require(state.claimed <= state.total, 'claimed amount unexpect error');
             emit MomaClaimed(msg.sender, recipient, accountType, claimed, state.total.sub(state.claimed));
         }
     }
