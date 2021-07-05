@@ -54,6 +54,7 @@ contract MomaLord {
     uint public constant TOTAL_LOCK_SECONDS_ADVISOR   = 30 days * 36;
     uint public constant TOTAL_LOCK_SECONDS_ECO_DEV   = 30 days * 48;
 
+    uint public constant FIRST_LOCK_SECONDS_FUND      = 30 days;
     uint public constant FIRST_LOCK_SECONDS_TEAM      = 30 days * 6;
     uint public constant FIRST_LOCK_SECONDS_ADVISOR   = 30 days * 6;
 
@@ -112,7 +113,26 @@ contract MomaLord {
     }
 
     /**
-     * @notice Calculate current vesting amount
+     * @notice Calculate current vesting amount for funding account
+     * @param total The total amount MOMA to release
+     * @param percent The release percentage of total amount at tge
+     * @param totalSeconds Total seconds to release all lock MOMA
+     * @param lockSeconds Lockup seconds from tge to start vesting
+     * @return Current total vested amount
+     */
+    function vestingAmountFunding(uint total, uint percent, uint totalSeconds, uint lockSeconds) internal view returns (uint) {
+        if (timestamp() < tge) return 0;
+        uint first = total.mul(percent).div(1e18);
+        uint startTime = tge.add(lockSeconds);
+        if (timestamp() <= startTime) return first;
+        uint secondsPassed = timestamp().sub(startTime);
+        if (secondsPassed >= totalSeconds) return total;
+        uint vesting = (total.sub(first)).mul(secondsPassed).div(totalSeconds);
+        return first.add(vesting);
+    }
+
+    /**
+     * @notice Calculate current vesting amount for other account
      * @param total The total amount MOMA to release
      * @param percent The release percentage of total amount at start
      * @param totalSeconds Total seconds to release all lock MOMA
@@ -144,13 +164,13 @@ contract MomaLord {
         uint amount;
         if (accountType == AccountType.Seed) {
             // amount = vestingAmount(state.total, 0, TOTAL_LOCK_SECONDS_SEED, 0);      // without first release
-            amount = vestingAmount(state.total, FIRST_RELEASE_PERCENT_SEED, TOTAL_LOCK_SECONDS_SEED, 0);          // with first release
+            amount = vestingAmountFunding(state.total, FIRST_RELEASE_PERCENT_SEED, TOTAL_LOCK_SECONDS_SEED, FIRST_LOCK_SECONDS_FUND);          // with first release
         } else if (accountType == AccountType.Private) {
             // amount = vestingAmount(state.total, 0, TOTAL_LOCK_SECONDS_PRIVATE, 0);   // without first release
-            amount = vestingAmount(state.total, FIRST_RELEASE_PERCENT_PRIVATE, TOTAL_LOCK_SECONDS_PRIVATE, 0);    // with first release
+            amount = vestingAmountFunding(state.total, FIRST_RELEASE_PERCENT_PRIVATE, TOTAL_LOCK_SECONDS_PRIVATE, FIRST_LOCK_SECONDS_FUND);    // with first release
         } else if (accountType == AccountType.Strategy) {
             // amount = vestingAmount(state.total, 0, TOTAL_LOCK_SECONDS_STRATEGY, 0);  // without first release
-            amount = vestingAmount(state.total, FIRST_RELEASE_PERCENT_STRATEGY, TOTAL_LOCK_SECONDS_STRATEGY, 0);  // with first release
+            amount = vestingAmountFunding(state.total, FIRST_RELEASE_PERCENT_STRATEGY, TOTAL_LOCK_SECONDS_STRATEGY, FIRST_LOCK_SECONDS_FUND);  // with first release
         } else if (accountType == AccountType.Team) {
             amount = vestingAmount(state.total, FIRST_RELEASE_PERCENT_TEAM, TOTAL_LOCK_SECONDS_TEAM, FIRST_LOCK_SECONDS_TEAM);
         } else if (accountType == AccountType.Advisor) {

@@ -63,6 +63,7 @@ const TOTAL_LOCK_SECONDS_TEAM      = ONE_MONTH * 36;
 const TOTAL_LOCK_SECONDS_ADVISOR   = ONE_MONTH * 36;
 const TOTAL_LOCK_SECONDS_ECO_DEV   = ONE_MONTH * 48;
 
+const FIRST_LOCK_SECONDS_FUND      = ONE_MONTH;
 const FIRST_LOCK_SECONDS_TEAM      = ONE_MONTH * 6;
 const FIRST_LOCK_SECONDS_ADVISOR   = ONE_MONTH * 6;
 
@@ -108,18 +109,25 @@ const CLAIMABLE_TESTS = [
   {
     description: 'tge',
     time: TGE,
-    expectedAmounts: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0].map((c) => etherExp(c))
+    expectedAmounts: [
+      FIRST_RELEASE_SEED1,
+      FIRST_RELEASE_SEED2,
+      FIRST_RELEASE_PRIVATE1,
+      FIRST_RELEASE_PRIVATE2,
+      FIRST_RELEASE_STRATEGY1,
+      FIRST_RELEASE_STRATEGY2,
+      0, 0, 0, 0, 0].map((c) => etherUnsigned(c))
   },
   {
     description: 'tge + 1 second',
     time: TGE + 1,
     expectedAmounts: [
-      FIRST_RELEASE_SEED1.plus(LEFT_RELEASE_SEED1.dividedBy(TOTAL_LOCK_SECONDS_SEED)),
-      FIRST_RELEASE_SEED2.plus(LEFT_RELEASE_SEED2.dividedBy(TOTAL_LOCK_SECONDS_SEED)),
-      FIRST_RELEASE_PRIVATE1.plus(LEFT_RELEASE_PRIVATE1.dividedBy(TOTAL_LOCK_SECONDS_PRIVATE)),
-      FIRST_RELEASE_PRIVATE2.plus(LEFT_RELEASE_PRIVATE2.dividedBy(TOTAL_LOCK_SECONDS_PRIVATE)),
-      FIRST_RELEASE_STRATEGY1.plus(LEFT_RELEASE_STRATEGY1.dividedBy(TOTAL_LOCK_SECONDS_STRATEGY)),
-      FIRST_RELEASE_STRATEGY2.plus(LEFT_RELEASE_STRATEGY2.dividedBy(TOTAL_LOCK_SECONDS_STRATEGY)),
+      FIRST_RELEASE_SEED1,
+      FIRST_RELEASE_SEED2,
+      FIRST_RELEASE_PRIVATE1,
+      FIRST_RELEASE_PRIVATE2,
+      FIRST_RELEASE_STRATEGY1,
+      FIRST_RELEASE_STRATEGY2,
       TOTAL_COMMUNITY,
       etherExp(0),
       etherExp(0),
@@ -128,15 +136,49 @@ const CLAIMABLE_TESTS = [
     ].map((c) => etherUnsigned(c.toFixed(0, 1)))
   },
   {
+    description: 'tge + 1 month',
+    time: TGE + ONE_MONTH,
+    expectedAmounts: [
+      FIRST_RELEASE_SEED1,
+      FIRST_RELEASE_SEED2,
+      FIRST_RELEASE_PRIVATE1,
+      FIRST_RELEASE_PRIVATE2,
+      FIRST_RELEASE_STRATEGY1,
+      FIRST_RELEASE_STRATEGY2,
+      TOTAL_COMMUNITY,
+      etherExp(0),
+      etherExp(0),
+      FIRST_RELEASE_ECO_DEV.plus(LEFT_RELEASE_ECO_DEV.multipliedBy(ONE_MONTH).dividedBy(TOTAL_LOCK_SECONDS_ECO_DEV)),
+      TOTAL_DAO
+    ].map((c) => etherUnsigned(c.toFixed(0, 1)))
+  },
+  {
+    description: 'tge + 1 monthes + 1 second',
+    time: TGE + ONE_MONTH + 1,
+    expectedAmounts: [
+      FIRST_RELEASE_SEED1.plus(LEFT_RELEASE_SEED1.multipliedBy(1).dividedBy(TOTAL_LOCK_SECONDS_SEED)),
+      FIRST_RELEASE_SEED2.plus(LEFT_RELEASE_SEED2.multipliedBy(1).dividedBy(TOTAL_LOCK_SECONDS_SEED)),
+      FIRST_RELEASE_PRIVATE1.plus(LEFT_RELEASE_PRIVATE1.multipliedBy(1).dividedBy(TOTAL_LOCK_SECONDS_PRIVATE)),
+      FIRST_RELEASE_PRIVATE2.plus(LEFT_RELEASE_PRIVATE2.multipliedBy(1).dividedBy(TOTAL_LOCK_SECONDS_PRIVATE)),
+      FIRST_RELEASE_STRATEGY1.plus(LEFT_RELEASE_STRATEGY1.multipliedBy(1).dividedBy(TOTAL_LOCK_SECONDS_STRATEGY)),
+      FIRST_RELEASE_STRATEGY2.plus(LEFT_RELEASE_STRATEGY2.multipliedBy(1).dividedBy(TOTAL_LOCK_SECONDS_STRATEGY)),
+      TOTAL_COMMUNITY,
+      etherExp(0),
+      etherExp(0),
+      FIRST_RELEASE_ECO_DEV.plus(LEFT_RELEASE_ECO_DEV.multipliedBy(ONE_MONTH + 1).dividedBy(TOTAL_LOCK_SECONDS_ECO_DEV)),
+      TOTAL_DAO
+    ].map((c) => etherUnsigned(c.toFixed(0, 1)))
+  },
+  {
     description: 'tge + 6 monthes',
     time: TGE + ONE_MONTH * 6,
     expectedAmounts: [
-      FIRST_RELEASE_SEED1.plus(LEFT_RELEASE_SEED1.multipliedBy(ONE_MONTH * 6).dividedBy(TOTAL_LOCK_SECONDS_SEED)),
-      FIRST_RELEASE_SEED2.plus(LEFT_RELEASE_SEED2.multipliedBy(ONE_MONTH * 6).dividedBy(TOTAL_LOCK_SECONDS_SEED)),
-      FIRST_RELEASE_PRIVATE1.plus(LEFT_RELEASE_PRIVATE1.multipliedBy(ONE_MONTH * 6).dividedBy(TOTAL_LOCK_SECONDS_PRIVATE)),
-      FIRST_RELEASE_PRIVATE2.plus(LEFT_RELEASE_PRIVATE2.multipliedBy(ONE_MONTH * 6).dividedBy(TOTAL_LOCK_SECONDS_PRIVATE)),
-      FIRST_RELEASE_STRATEGY1.plus(LEFT_RELEASE_STRATEGY1.multipliedBy(ONE_MONTH * 6).dividedBy(TOTAL_LOCK_SECONDS_STRATEGY)),
-      FIRST_RELEASE_STRATEGY2.plus(LEFT_RELEASE_STRATEGY2.multipliedBy(ONE_MONTH * 6).dividedBy(TOTAL_LOCK_SECONDS_STRATEGY)),
+      FIRST_RELEASE_SEED1.plus(LEFT_RELEASE_SEED1.multipliedBy(ONE_MONTH * 5).dividedBy(TOTAL_LOCK_SECONDS_SEED)),
+      FIRST_RELEASE_SEED2.plus(LEFT_RELEASE_SEED2.multipliedBy(ONE_MONTH * 5).dividedBy(TOTAL_LOCK_SECONDS_SEED)),
+      FIRST_RELEASE_PRIVATE1.plus(LEFT_RELEASE_PRIVATE1.multipliedBy(ONE_MONTH * 5).dividedBy(TOTAL_LOCK_SECONDS_PRIVATE)),
+      FIRST_RELEASE_PRIVATE2.plus(LEFT_RELEASE_PRIVATE2.multipliedBy(ONE_MONTH * 5).dividedBy(TOTAL_LOCK_SECONDS_PRIVATE)),
+      FIRST_RELEASE_STRATEGY1.plus(LEFT_RELEASE_STRATEGY1.multipliedBy(ONE_MONTH * 5).dividedBy(TOTAL_LOCK_SECONDS_STRATEGY)),
+      FIRST_RELEASE_STRATEGY2.plus(LEFT_RELEASE_STRATEGY2.multipliedBy(ONE_MONTH * 5).dividedBy(TOTAL_LOCK_SECONDS_STRATEGY)),
       TOTAL_COMMUNITY,
       etherExp(0),
       etherExp(0),
@@ -148,12 +190,12 @@ const CLAIMABLE_TESTS = [
     description: 'tge + 6 monthes + 1 second',
     time: TGE + ONE_MONTH * 6 + 1,
     expectedAmounts: [
-      FIRST_RELEASE_SEED1.plus(LEFT_RELEASE_SEED1.multipliedBy(ONE_MONTH * 6 + 1).dividedBy(TOTAL_LOCK_SECONDS_SEED)),
-      FIRST_RELEASE_SEED2.plus(LEFT_RELEASE_SEED2.multipliedBy(ONE_MONTH * 6 + 1).dividedBy(TOTAL_LOCK_SECONDS_SEED)),
-      FIRST_RELEASE_PRIVATE1.plus(LEFT_RELEASE_PRIVATE1.multipliedBy(ONE_MONTH * 6 + 1).dividedBy(TOTAL_LOCK_SECONDS_PRIVATE)),
-      FIRST_RELEASE_PRIVATE2.plus(LEFT_RELEASE_PRIVATE2.multipliedBy(ONE_MONTH * 6 + 1).dividedBy(TOTAL_LOCK_SECONDS_PRIVATE)),
-      FIRST_RELEASE_STRATEGY1.plus(LEFT_RELEASE_STRATEGY1.multipliedBy(ONE_MONTH * 6 + 1).dividedBy(TOTAL_LOCK_SECONDS_STRATEGY)),
-      FIRST_RELEASE_STRATEGY2.plus(LEFT_RELEASE_STRATEGY2.multipliedBy(ONE_MONTH * 6 + 1).dividedBy(TOTAL_LOCK_SECONDS_STRATEGY)),
+      FIRST_RELEASE_SEED1.plus(LEFT_RELEASE_SEED1.multipliedBy(ONE_MONTH * 5 + 1).dividedBy(TOTAL_LOCK_SECONDS_SEED)),
+      FIRST_RELEASE_SEED2.plus(LEFT_RELEASE_SEED2.multipliedBy(ONE_MONTH * 5 + 1).dividedBy(TOTAL_LOCK_SECONDS_SEED)),
+      FIRST_RELEASE_PRIVATE1.plus(LEFT_RELEASE_PRIVATE1.multipliedBy(ONE_MONTH * 5 + 1).dividedBy(TOTAL_LOCK_SECONDS_PRIVATE)),
+      FIRST_RELEASE_PRIVATE2.plus(LEFT_RELEASE_PRIVATE2.multipliedBy(ONE_MONTH * 5 + 1).dividedBy(TOTAL_LOCK_SECONDS_PRIVATE)),
+      FIRST_RELEASE_STRATEGY1.plus(LEFT_RELEASE_STRATEGY1.multipliedBy(ONE_MONTH * 5 + 1).dividedBy(TOTAL_LOCK_SECONDS_STRATEGY)),
+      FIRST_RELEASE_STRATEGY2.plus(LEFT_RELEASE_STRATEGY2.multipliedBy(ONE_MONTH * 5 + 1).dividedBy(TOTAL_LOCK_SECONDS_STRATEGY)),
       TOTAL_COMMUNITY,
       FIRST_RELEASE_TEAM.plus(LEFT_RELEASE_TEAM.multipliedBy(1).dividedBy(TOTAL_LOCK_SECONDS_TEAM)),
       FIRST_RELEASE_ADVISOR.plus(LEFT_RELEASE_ADVISOR.multipliedBy(1).dividedBy(TOTAL_LOCK_SECONDS_ADVISOR)),
@@ -162,8 +204,8 @@ const CLAIMABLE_TESTS = [
     ].map((c) => etherUnsigned(c.toFixed(0, 1)))
   },
   {
-    description: 'tge + 9 monthes',
-    time: TGE + ONE_MONTH * 9,
+    description: 'tge + 10 monthes',
+    time: TGE + ONE_MONTH * 10,
     expectedAmounts: [
       FIRST_RELEASE_SEED1.plus(LEFT_RELEASE_SEED1.multipliedBy(ONE_MONTH * 9).dividedBy(TOTAL_LOCK_SECONDS_SEED)),
       FIRST_RELEASE_SEED2.plus(LEFT_RELEASE_SEED2.multipliedBy(ONE_MONTH * 9).dividedBy(TOTAL_LOCK_SECONDS_SEED)),
@@ -172,15 +214,15 @@ const CLAIMABLE_TESTS = [
       STRATEGY1_TOTAL,
       STRATEGY2_TOTAL,
       TOTAL_COMMUNITY,
-      FIRST_RELEASE_TEAM.plus(LEFT_RELEASE_TEAM.multipliedBy(ONE_MONTH * 3).dividedBy(TOTAL_LOCK_SECONDS_TEAM)),
-      FIRST_RELEASE_ADVISOR.plus(LEFT_RELEASE_ADVISOR.multipliedBy(ONE_MONTH * 3).dividedBy(TOTAL_LOCK_SECONDS_ADVISOR)),
-      FIRST_RELEASE_ECO_DEV.plus(LEFT_RELEASE_ECO_DEV.multipliedBy(ONE_MONTH * 9).dividedBy(TOTAL_LOCK_SECONDS_ECO_DEV)),
+      FIRST_RELEASE_TEAM.plus(LEFT_RELEASE_TEAM.multipliedBy(ONE_MONTH * 4).dividedBy(TOTAL_LOCK_SECONDS_TEAM)),
+      FIRST_RELEASE_ADVISOR.plus(LEFT_RELEASE_ADVISOR.multipliedBy(ONE_MONTH * 4).dividedBy(TOTAL_LOCK_SECONDS_ADVISOR)),
+      FIRST_RELEASE_ECO_DEV.plus(LEFT_RELEASE_ECO_DEV.multipliedBy(ONE_MONTH * 10).dividedBy(TOTAL_LOCK_SECONDS_ECO_DEV)),
       TOTAL_DAO
     ].map((c) => etherUnsigned(c.toFixed(0, 1)))
   },
   {
-    description: 'tge + 12 monthes',
-    time: TGE + ONE_MONTH * 12,
+    description: 'tge + 13 monthes',
+    time: TGE + ONE_MONTH * 13,
     expectedAmounts: [
       SEED1_TOTAL,
       SEED2_TOTAL,
@@ -189,9 +231,9 @@ const CLAIMABLE_TESTS = [
       STRATEGY1_TOTAL,
       STRATEGY2_TOTAL,
       TOTAL_COMMUNITY,
-      FIRST_RELEASE_TEAM.plus(LEFT_RELEASE_TEAM.multipliedBy(ONE_MONTH * 6).dividedBy(TOTAL_LOCK_SECONDS_TEAM)),
-      FIRST_RELEASE_ADVISOR.plus(LEFT_RELEASE_ADVISOR.multipliedBy(ONE_MONTH * 6).dividedBy(TOTAL_LOCK_SECONDS_ADVISOR)),
-      FIRST_RELEASE_ECO_DEV.plus(LEFT_RELEASE_ECO_DEV.multipliedBy(ONE_MONTH * 12).dividedBy(TOTAL_LOCK_SECONDS_ECO_DEV)),
+      FIRST_RELEASE_TEAM.plus(LEFT_RELEASE_TEAM.multipliedBy(ONE_MONTH * 7).dividedBy(TOTAL_LOCK_SECONDS_TEAM)),
+      FIRST_RELEASE_ADVISOR.plus(LEFT_RELEASE_ADVISOR.multipliedBy(ONE_MONTH * 7).dividedBy(TOTAL_LOCK_SECONDS_ADVISOR)),
+      FIRST_RELEASE_ECO_DEV.plus(LEFT_RELEASE_ECO_DEV.multipliedBy(ONE_MONTH * 13).dividedBy(TOTAL_LOCK_SECONDS_ECO_DEV)),
       TOTAL_DAO
     ].map((c) => etherUnsigned(c.toFixed(0, 1)))
   },
@@ -589,7 +631,7 @@ describe('MomaLord', () => {
       await freezeTime(TGE + ONE_MONTH * 6);
       await checkBalances(moma, [momaLord._address, seed1], [TOTAL.minus(claimable1), claimable1]);
       await checkClaimState(momaLord, [seed1], ['0'], [SEED1_TOTAL], [claimable1]);
-      const claimable2 = CLAIMABLE_TESTS[3].expectedAmounts[0].minus(claimable1);
+      const claimable2 = CLAIMABLE_TESTS[5].expectedAmounts[0].minus(claimable1);
       await checkClaimable(momaLord, [seed1], ['0'], [claimable2]);
       tx = await send(momaLord, 'claim', {from: seed1});
 
@@ -604,7 +646,7 @@ describe('MomaLord', () => {
         left: SEED1_TOTAL.minus(claimable1).minus(claimable2).toFixed()
       });
 
-      await freezeTime(TGE + ONE_MONTH * 12);
+      await freezeTime(TGE + ONE_MONTH * 13);
       await checkBalances(moma, [momaLord._address, seed1], [TOTAL.minus(claimable1).minus(claimable2), claimable1.plus(claimable2)]);
       await checkClaimState(momaLord, [seed1], ['0'], [SEED1_TOTAL], [claimable1.plus(claimable2)]);
       const claimable3 = SEED1_TOTAL.minus(claimable1).minus(claimable2);
