@@ -64,8 +64,8 @@ const TOTAL_LOCK_SECONDS_ADVISOR   = ONE_MONTH * 36;
 const TOTAL_LOCK_SECONDS_ECO_DEV   = ONE_MONTH * 48;
 
 const FIRST_LOCK_SECONDS_FUND      = ONE_MONTH;
-const FIRST_LOCK_SECONDS_TEAM      = ONE_MONTH * 6;
-const FIRST_LOCK_SECONDS_ADVISOR   = ONE_MONTH * 6;
+const FIRST_LOCK_SECONDS_TEAM      = ONE_MONTH * 12;
+const FIRST_LOCK_SECONDS_ADVISOR   = ONE_MONTH * 12;
 
 const FIRST_RELEASE_TEAM     = TOTAL_TEAM.multipliedBy(0.1);
 const FIRST_RELEASE_ADVISOR  = TOTAL_ADVISOR.multipliedBy(0.1);
@@ -197,8 +197,8 @@ const CLAIMABLE_TESTS = [
       FIRST_RELEASE_STRATEGY1.plus(LEFT_RELEASE_STRATEGY1.multipliedBy(ONE_MONTH * 5 + 1).dividedBy(TOTAL_LOCK_SECONDS_STRATEGY)),
       FIRST_RELEASE_STRATEGY2.plus(LEFT_RELEASE_STRATEGY2.multipliedBy(ONE_MONTH * 5 + 1).dividedBy(TOTAL_LOCK_SECONDS_STRATEGY)),
       TOTAL_COMMUNITY,
-      FIRST_RELEASE_TEAM.plus(LEFT_RELEASE_TEAM.multipliedBy(1).dividedBy(TOTAL_LOCK_SECONDS_TEAM)),
-      FIRST_RELEASE_ADVISOR.plus(LEFT_RELEASE_ADVISOR.multipliedBy(1).dividedBy(TOTAL_LOCK_SECONDS_ADVISOR)),
+      etherExp(0),
+      etherExp(0),
       FIRST_RELEASE_ECO_DEV.plus(LEFT_RELEASE_ECO_DEV.multipliedBy(ONE_MONTH * 6 + 1).dividedBy(TOTAL_LOCK_SECONDS_ECO_DEV)),
       TOTAL_DAO
     ].map((c) => etherUnsigned(c.toFixed(0, 1)))
@@ -214,9 +214,43 @@ const CLAIMABLE_TESTS = [
       STRATEGY1_TOTAL,
       STRATEGY2_TOTAL,
       TOTAL_COMMUNITY,
-      FIRST_RELEASE_TEAM.plus(LEFT_RELEASE_TEAM.multipliedBy(ONE_MONTH * 4).dividedBy(TOTAL_LOCK_SECONDS_TEAM)),
-      FIRST_RELEASE_ADVISOR.plus(LEFT_RELEASE_ADVISOR.multipliedBy(ONE_MONTH * 4).dividedBy(TOTAL_LOCK_SECONDS_ADVISOR)),
+      etherExp(0),
+      etherExp(0),
       FIRST_RELEASE_ECO_DEV.plus(LEFT_RELEASE_ECO_DEV.multipliedBy(ONE_MONTH * 10).dividedBy(TOTAL_LOCK_SECONDS_ECO_DEV)),
+      TOTAL_DAO
+    ].map((c) => etherUnsigned(c.toFixed(0, 1)))
+  },
+  {
+    description: 'tge + 12 monthes',
+    time: TGE + ONE_MONTH * 12,
+    expectedAmounts: [
+      FIRST_RELEASE_SEED1.plus(LEFT_RELEASE_SEED1.multipliedBy(ONE_MONTH * 11).dividedBy(TOTAL_LOCK_SECONDS_SEED)),
+      FIRST_RELEASE_SEED2.plus(LEFT_RELEASE_SEED2.multipliedBy(ONE_MONTH * 11).dividedBy(TOTAL_LOCK_SECONDS_SEED)),
+      PRIVATE1_TOTAL,
+      PRIVATE2_TOTAL,
+      STRATEGY1_TOTAL,
+      STRATEGY2_TOTAL,
+      TOTAL_COMMUNITY,
+      etherExp(0),
+      etherExp(0),
+      FIRST_RELEASE_ECO_DEV.plus(LEFT_RELEASE_ECO_DEV.multipliedBy(ONE_MONTH * 12).dividedBy(TOTAL_LOCK_SECONDS_ECO_DEV)),
+      TOTAL_DAO
+    ].map((c) => etherUnsigned(c.toFixed(0, 1)))
+  },
+  {
+    description: 'tge + 12 monthes + 1 second',
+    time: TGE + ONE_MONTH * 12 + 1,
+    expectedAmounts: [
+      FIRST_RELEASE_SEED1.plus(LEFT_RELEASE_SEED1.multipliedBy(ONE_MONTH * 11 + 1).dividedBy(TOTAL_LOCK_SECONDS_SEED)),
+      FIRST_RELEASE_SEED2.plus(LEFT_RELEASE_SEED2.multipliedBy(ONE_MONTH * 11 + 1).dividedBy(TOTAL_LOCK_SECONDS_SEED)),
+      PRIVATE1_TOTAL,
+      PRIVATE2_TOTAL,
+      STRATEGY1_TOTAL,
+      STRATEGY2_TOTAL,
+      TOTAL_COMMUNITY,
+      FIRST_RELEASE_TEAM.plus(LEFT_RELEASE_TEAM.multipliedBy(1).dividedBy(TOTAL_LOCK_SECONDS_TEAM)),
+      FIRST_RELEASE_ADVISOR.plus(LEFT_RELEASE_ADVISOR.multipliedBy(1).dividedBy(TOTAL_LOCK_SECONDS_ADVISOR)),
+      FIRST_RELEASE_ECO_DEV.plus(LEFT_RELEASE_ECO_DEV.multipliedBy(ONE_MONTH * 12 + 1).dividedBy(TOTAL_LOCK_SECONDS_ECO_DEV)),
       TOTAL_DAO
     ].map((c) => etherUnsigned(c.toFixed(0, 1)))
   },
@@ -231,8 +265,8 @@ const CLAIMABLE_TESTS = [
       STRATEGY1_TOTAL,
       STRATEGY2_TOTAL,
       TOTAL_COMMUNITY,
-      FIRST_RELEASE_TEAM.plus(LEFT_RELEASE_TEAM.multipliedBy(ONE_MONTH * 7).dividedBy(TOTAL_LOCK_SECONDS_TEAM)),
-      FIRST_RELEASE_ADVISOR.plus(LEFT_RELEASE_ADVISOR.multipliedBy(ONE_MONTH * 7).dividedBy(TOTAL_LOCK_SECONDS_ADVISOR)),
+      FIRST_RELEASE_TEAM.plus(LEFT_RELEASE_TEAM.multipliedBy(ONE_MONTH * 1).dividedBy(TOTAL_LOCK_SECONDS_TEAM)),
+      FIRST_RELEASE_ADVISOR.plus(LEFT_RELEASE_ADVISOR.multipliedBy(ONE_MONTH * 1).dividedBy(TOTAL_LOCK_SECONDS_ADVISOR)),
       FIRST_RELEASE_ECO_DEV.plus(LEFT_RELEASE_ECO_DEV.multipliedBy(ONE_MONTH * 13).dividedBy(TOTAL_LOCK_SECONDS_ECO_DEV)),
       TOTAL_DAO
     ].map((c) => etherUnsigned(c.toFixed(0, 1)))
@@ -248,8 +282,8 @@ const CLAIMABLE_TESTS = [
       STRATEGY1_TOTAL,
       STRATEGY2_TOTAL,
       TOTAL_COMMUNITY,
-      TOTAL_TEAM,
-      TOTAL_ADVISOR,
+      FIRST_RELEASE_TEAM.plus(LEFT_RELEASE_TEAM.multipliedBy(ONE_MONTH * 30).dividedBy(TOTAL_LOCK_SECONDS_TEAM)),
+      FIRST_RELEASE_ADVISOR.plus(LEFT_RELEASE_ADVISOR.multipliedBy(ONE_MONTH * 30).dividedBy(TOTAL_LOCK_SECONDS_ADVISOR)),
       FIRST_RELEASE_ECO_DEV.plus(LEFT_RELEASE_ECO_DEV.multipliedBy(ONE_MONTH * 42).dividedBy(TOTAL_LOCK_SECONDS_ECO_DEV)),
       TOTAL_DAO
     ].map((c) => etherUnsigned(c.toFixed(0, 1)))
@@ -257,6 +291,23 @@ const CLAIMABLE_TESTS = [
   {
     description: 'tge + 48 monthes',
     time: TGE + ONE_MONTH * 48,
+    expectedAmounts: [
+      SEED1_TOTAL,
+      SEED2_TOTAL,
+      PRIVATE1_TOTAL,
+      PRIVATE2_TOTAL,
+      STRATEGY1_TOTAL,
+      STRATEGY2_TOTAL,
+      TOTAL_COMMUNITY,
+      TOTAL_TEAM,
+      TOTAL_ADVISOR,
+      TOTAL_ECO_DEV,
+      TOTAL_DAO
+    ].map((c) => etherUnsigned(c.toFixed(0, 1)))
+  },
+  {
+    description: 'tge + 48 monthes + 1 second',
+    time: TGE + ONE_MONTH * 48 + 1,
     expectedAmounts: [
       SEED1_TOTAL,
       SEED2_TOTAL,

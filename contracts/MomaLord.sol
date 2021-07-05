@@ -55,8 +55,8 @@ contract MomaLord {
     uint public constant TOTAL_LOCK_SECONDS_ECO_DEV   = 30 days * 48;
 
     uint public constant FIRST_LOCK_SECONDS_FUND      = 30 days;
-    uint public constant FIRST_LOCK_SECONDS_TEAM      = 30 days * 6;
-    uint public constant FIRST_LOCK_SECONDS_ADVISOR   = 30 days * 6;
+    uint public constant FIRST_LOCK_SECONDS_TEAM      = 30 days * 12;
+    uint public constant FIRST_LOCK_SECONDS_ADVISOR   = 30 days * 12;
 
     uint public constant FIRST_RELEASE_PERCENT_SEED      = 0.15e18;  // with first release
     uint public constant FIRST_RELEASE_PERCENT_PRIVATE   = 0.2e18;   // with first release
