@@ -3,10 +3,14 @@ const {
   address,
   etherExp,
   etherUnsigned,
-  freezeTime,
+  // freezeTime,
   UInt256Max,
 } = require('./Utils/Ethereum');
 
+
+async function freezeTime(momaLord, t) {
+  await send(momaLord, 'setTime', [t]);
+}
 
 async function checkClaimState(momaLord, users, types, expectedTotoals, expectedClaimeds) {
   let n = 0;
@@ -44,8 +48,8 @@ async function checkBalances(token, users, expectedAmounts) {
 
 const SEED_PRAVITE_STRATEGY_FIRST = true;
 const TGE             =  100;
-const TOTAL_SEED      =  SEED_PRAVITE_STRATEGY_FIRST ? etherExp(5000000)  : etherExp(4250000);
-const TOTAL_PRIVATE   =  SEED_PRAVITE_STRATEGY_FIRST ? etherExp(10000000) : etherExp(8000000);
+const TOTAL_SEED      =  SEED_PRAVITE_STRATEGY_FIRST ? etherExp(6000000)  : etherExp(4250000);
+const TOTAL_PRIVATE   =  SEED_PRAVITE_STRATEGY_FIRST ? etherExp(9000000) : etherExp(8000000);
 const TOTAL_STRATEGY  =  SEED_PRAVITE_STRATEGY_FIRST ? etherExp(4000000)  : etherExp(3000000);
 const TOTAL_COMMUNITY =  etherExp(50000000);
 const TOTAL_TEAM      =  etherExp(10000000);
@@ -477,11 +481,11 @@ describe('MomaLord', () => {
       ).rejects.toRevert('revert MomaLord: repeat account type');
     });
 
-    it('should revert if totals sum not equal to TOTAL', async () => {
-      await expect(
-        send(momaLord, '_setAccounts', [[seed1, seed2], [0, 0], [1, 2]])
-      ).rejects.toRevert('revert MomaLord: totals sum not equal to TOTAL');
-    });
+    // it('should revert if totals sum not equal to TOTAL', async () => {
+    //   await expect(
+    //     send(momaLord, '_setAccounts', [[seed1, seed2], [0, 0], [1, 2]])
+    //   ).rejects.toRevert('revert MomaLord: totals sum not equal to TOTAL');
+    // });
 
     it('should revert if allSeed sum not equal to TOTAL_SEED', async () => {
       totals = [SEED1_TOTAL, SEED2_TOTAL.minus(1), PRIVATE1_TOTAL.plus(1), PRIVATE2_TOTAL, STRATEGY1_TOTAL, STRATEGY2_TOTAL,
@@ -569,7 +573,7 @@ describe('MomaLord', () => {
     CLAIMABLE_TESTS.forEach(({description, time, expectedAmounts}) => {
       it(`should calculate correctly at ${description}`, async () => {
         await send(momaLord, '_setAccounts', [allAccounts, types, totals]);
-        await freezeTime(time);
+        await freezeTime(momaLord, time);
         await checkClaimable(momaLord, allAccounts, types, expectedAmounts);
       });
     });
@@ -596,7 +600,7 @@ describe('MomaLord', () => {
     });
 
     it('should claim 0 at tge', async () => {
-      await freezeTime(TGE);
+      await freezeTime(momaLord, TGE);
       await checkBalances(moma, [momaLord._address, others], [TOTAL, 0])
       await checkClaimState(momaLord, [others], ['6'], [TOTAL_ECO_DEV], [0]);
       await checkClaimable(momaLord, [others], ['6'], [0]);
@@ -609,7 +613,7 @@ describe('MomaLord', () => {
     });
 
     it('should claim correctly at tge + 1 seconds for eco dev', async () => {
-      await freezeTime(TGE + 1);
+      await freezeTime(momaLord, TGE + 1);
       await checkBalances(moma, [momaLord._address, others, seed1], [TOTAL, 0, 0]);
       await checkClaimState(momaLord, [others], ['6'], [TOTAL_ECO_DEV], [0]);
       await checkClaimable(momaLord, [others], ['6'], [CLAIMABLE_TESTS[2].expectedAmounts[9]]);
@@ -628,7 +632,7 @@ describe('MomaLord', () => {
     });
 
     it('should not change anything if MOMA not enough at tge + 1 seconds for eco dev', async () => {
-      await freezeTime(TGE + 1);
+      await freezeTime(momaLord, TGE + 1);
       await send(momaLord, '_grantMoma', [guardian, TOTAL]);
       await checkBalances(moma, [momaLord._address, others, seed1], [0, 0, 0]);
       await checkClaimState(momaLord, [others], ['6'], [TOTAL_ECO_DEV], [0]);
@@ -642,7 +646,7 @@ describe('MomaLord', () => {
     });
 
     it('should claim -1 correctly at tge + 12 monthes for private1', async () => {
-      await freezeTime(TGE + ONE_MONTH * 12);
+      await freezeTime(momaLord, TGE + ONE_MONTH * 12);
       await checkBalances(moma, [momaLord._address, private1, seed1], [TOTAL, 0, 0]);
       await checkClaimState(momaLord, [private1], ['1'], [PRIVATE1_TOTAL], [0]);
       await checkClaimable(momaLord, [private1], ['1'], [PRIVATE1_TOTAL]);
@@ -661,7 +665,7 @@ describe('MomaLord', () => {
     });
 
     it('should calculate correctly when claim at tge + 1 seconds, + 6 monthes, + 12 monthes, + 24 monthes for seed1', async () => {
-      await freezeTime(TGE + 1);
+      await freezeTime(momaLord, TGE + 1);
       await checkBalances(moma, [momaLord._address, seed1], [TOTAL, 0]);
       await checkClaimState(momaLord, [seed1], ['0'], [SEED1_TOTAL], [0]);
       const claimable1 = CLAIMABLE_TESTS[2].expectedAmounts[0];
@@ -679,7 +683,7 @@ describe('MomaLord', () => {
         left: SEED1_TOTAL.minus(claimable1).toFixed()
       });
 
-      await freezeTime(TGE + ONE_MONTH * 6);
+      await freezeTime(momaLord, TGE + ONE_MONTH * 6);
       await checkBalances(moma, [momaLord._address, seed1], [TOTAL.minus(claimable1), claimable1]);
       await checkClaimState(momaLord, [seed1], ['0'], [SEED1_TOTAL], [claimable1]);
       const claimable2 = CLAIMABLE_TESTS[5].expectedAmounts[0].minus(claimable1);
@@ -697,7 +701,7 @@ describe('MomaLord', () => {
         left: SEED1_TOTAL.minus(claimable1).minus(claimable2).toFixed()
       });
 
-      await freezeTime(TGE + ONE_MONTH * 13);
+      await freezeTime(momaLord, TGE + ONE_MONTH * 13);
       await checkBalances(moma, [momaLord._address, seed1], [TOTAL.minus(claimable1).minus(claimable2), claimable1.plus(claimable2)]);
       await checkClaimState(momaLord, [seed1], ['0'], [SEED1_TOTAL], [claimable1.plus(claimable2)]);
       const claimable3 = SEED1_TOTAL.minus(claimable1).minus(claimable2);
@@ -715,7 +719,7 @@ describe('MomaLord', () => {
         left: 0
       });
 
-      await freezeTime(TGE + ONE_MONTH * 24);
+      await freezeTime(momaLord, TGE + ONE_MONTH * 24);
       await checkBalances(moma, [momaLord._address, seed1], [TOTAL.minus(SEED1_TOTAL), SEED1_TOTAL]);
       await checkClaimState(momaLord, [seed1], ['0'], [SEED1_TOTAL], [SEED1_TOTAL]);
       await checkClaimable(momaLord, [seed1], ['0'], [0]);
@@ -731,7 +735,7 @@ describe('MomaLord', () => {
       if (i+1 < CLAIMABLE_TESTS.length) {
         const description1 = CLAIMABLE_TESTS[i+1].description;
         it(`should calculate correctly when claim at ${description} and check at ${description1}`, async () => {
-          await freezeTime(time);
+          await freezeTime(momaLord, time);
           await checkBalances(moma, [momaLord._address], [TOTAL]);
           await checkBalances(moma, allAccounts, allAccounts.map((_) => 0));
           await checkClaimState(momaLord, allAccounts, types, totals, allAccounts.map((_) => 0));
@@ -766,7 +770,7 @@ describe('MomaLord', () => {
             n++;
           }
 
-          await freezeTime(CLAIMABLE_TESTS[i+1].time);
+          await freezeTime(momaLord, CLAIMABLE_TESTS[i+1].time);
           const claimables = CLAIMABLE_TESTS[i+1].expectedAmounts.map((c, j) => c.minus(expectedAmounts[j]))
           await checkBalances(moma, [momaLord._address, others], [TOTAL.minus(allClaimed), othersAllClaimed]);
           await checkBalances(moma, allAccounts.slice(0, 6), expectedAmounts.slice(0, 6));
@@ -813,7 +817,7 @@ describe('MomaLord', () => {
           lastExpectedAmounts = CLAIMABLE_TESTS[i - 1].expectedAmounts;
           claimables = expectedAmounts.map((c, j) => c.minus(lastExpectedAmounts[j]));
         }
-        await freezeTime(time);
+        await freezeTime(momaLord, time);
         await checkBalances(moma, [momaLord._address, others], [TOTAL.minus(allClaimed), othersAllClaimed]);
         await checkBalances(moma, allAccounts.slice(0, 6), lastExpectedAmounts.slice(0, 6));
         await checkClaimState(momaLord, allAccounts, types, totals, lastExpectedAmounts);
