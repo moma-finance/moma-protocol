@@ -8,8 +8,8 @@ contract MomaLordHarness is MomaLord {
     // uint public constant TOTAL_SEED      =  4250000e18;  // without first release
     // uint public constant TOTAL_PRIVATE   =  8000000e18;  // without first release
     // uint public constant TOTAL_STRATEGY  =  3000000e18;  // without first release
-    uint public constant TOTAL_SEED      =  5000000e18;  // with first release
-    uint public constant TOTAL_PRIVATE   = 10000000e18;  // with first release
+    uint public constant TOTAL_SEED      =  6000000e18;  // with first release
+    uint public constant TOTAL_PRIVATE   =  9000000e18;  // with first release
     uint public constant TOTAL_STRATEGY  =  4000000e18;  // with first release
     uint public constant TOTAL_COMMUNITY = 50000000e18;
     uint public constant TOTAL_TEAM      = 10000000e18;
@@ -17,9 +17,19 @@ contract MomaLordHarness is MomaLord {
     uint public constant TOTAL_ECO_DEV   =  8000000e18;
     uint public constant TOTAL_DAO       =  9000000e18;
     uint public constant TOTAL = TOTAL_SEED + TOTAL_PRIVATE + TOTAL_STRATEGY + TOTAL_COMMUNITY + TOTAL_TEAM + TOTAL_ADVISOR + TOTAL_ECO_DEV + TOTAL_DAO;
+    
+    uint public current;
 
     constructor (Moma _moma, uint _tge) MomaLord(_moma, _tge) public  {}
 
+    function timestamp() public view returns (uint) {
+        return current;
+    }
+
+    function setTime(uint t) external {
+        require(msg.sender == admin, 'MomaLord: admin check');
+        current = t;
+    }
 
     /**
      * @notice Set the claimable MOMA for all accounts
@@ -59,7 +69,7 @@ contract MomaLordHarness is MomaLord {
             }
         }
 
-        require(allMoma == TOTAL, 'MomaLord: totals sum not equal to TOTAL');
+        // require(allMoma == TOTAL, 'MomaLord: totals sum not equal to TOTAL');
         require(allSeed == TOTAL_SEED, 'MomaLord: allSeed sum not equal to TOTAL_SEED');
         require(allPrivate == TOTAL_PRIVATE, 'MomaLord: allPrivate sum not equal to TOTAL_PRIVATE');
         require(allStrategy == TOTAL_STRATEGY, 'MomaLord: allStrategy sum not equal to TOTAL_STRATEGY');
