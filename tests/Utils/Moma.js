@@ -148,10 +148,10 @@ async function makeMomaPool(opts = {}) {
     await send(momaPool, '_updatePriceOracle');
   }
 
-  const closeFactor = etherMantissa(dfn(opts.closeFactor, .051));
-  const liquidationIncentive = etherMantissa(1);
-  await send(momaPool, '_setLiquidationIncentive', [liquidationIncentive], {from: opts.from || root});
-  await send(momaPool, '_setCloseFactor', [closeFactor], {from: opts.from || root});
+  // const closeFactor = etherMantissa(dfn(opts.closeFactor, .051));
+  // const liquidationIncentive = etherMantissa(1);
+  // await send(momaPool, '_setLiquidationIncentive', [liquidationIncentive], {from: opts.from || root});
+  // await send(momaPool, '_setCloseFactor', [closeFactor], {from: opts.from || root});
 
   return Object.assign(momaPool, { priceOracle, factory, momaMaster });
 }

@@ -78,6 +78,12 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
     // closeFactorMantissa must not exceed this value
     uint internal constant closeFactorMaxMantissa = 0.9e18; // 0.9
 
+    // liquidationIncentiveMantissa must be no less than this value
+    uint internal constant liquidationIncentiveMinMantissa = 1.0e18; // 1.0
+
+    // liquidationIncentiveMantissa must be no greater than this value
+    uint internal constant liquidationIncentiveMaxMantissa = 1.5e18; // 1.5
+
     // No collateralFactorMantissa may exceed this value
     uint internal constant collateralFactorMaxMantissa = 0.9e18; // 0.9
 
@@ -853,6 +859,8 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
     function _setCloseFactor(uint newCloseFactorMantissa) external returns (uint) {
         // Check caller is admin
     	require(msg.sender == admin, "only admin can set close factor");
+        require(newCloseFactorMantissa >= closeFactorMinMantissa, "close factor too small");
+        require(newCloseFactorMantissa <= closeFactorMaxMantissa, "close factor too large");
 
         uint oldCloseFactorMantissa = closeFactorMantissa;
         closeFactorMantissa = newCloseFactorMantissa;
@@ -914,6 +922,9 @@ contract MomaMaster is MomaMasterInterface, MomaMasterV1Storage, MomaMasterError
         if (msg.sender != admin) {
             return fail(Error.UNAUTHORIZED, FailureInfo.SET_LIQUIDATION_INCENTIVE_OWNER_CHECK);
         }
+
+        require(newLiquidationIncentiveMantissa >= liquidationIncentiveMinMantissa, "liquidation incentive too small");
+        require(newLiquidationIncentiveMantissa <= liquidationIncentiveMaxMantissa, "liquidation incentive too large");
 
         // Save current value for use in log
         uint oldLiquidationIncentiveMantissa = liquidationIncentiveMantissa;

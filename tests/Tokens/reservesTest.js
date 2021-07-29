@@ -7,6 +7,7 @@ const {
 
 const {fastForward, makeMToken, setBorrowRate} = require('../Utils/Moma');
 
+const defaultFactor = etherMantissa(.1);
 const factor = etherMantissa(.02);
 
 const reserves = etherUnsigned(3e12);
@@ -30,18 +31,18 @@ describe('#MToken/reserves', function () {
       expect(
         await send(mToken, 'harnessSetReserveFactorFresh', [factor], {from: accounts[0]})
       ).toHaveTokenFailure('UNAUTHORIZED', 'SET_RESERVE_FACTOR_ADMIN_CHECK');
-      expect(await call(mToken, 'reserveFactorMantissa')).toEqualNumber(0);
+      expect(await call(mToken, 'reserveFactorMantissa')).toEqualNumber(defaultFactor);
     });
 
     it("rejects change if market not fresh", async () => {
       expect(await send(mToken, 'harnessFastForward', [5])).toSucceed();
       expect(await send(mToken, 'harnessSetReserveFactorFresh', [factor])).toHaveTokenFailure('MARKET_NOT_FRESH', 'SET_RESERVE_FACTOR_FRESH_CHECK');
-      expect(await call(mToken, 'reserveFactorMantissa')).toEqualNumber(0);
+      expect(await call(mToken, 'reserveFactorMantissa')).toEqualNumber(defaultFactor);
     });
 
     it("rejects newReserveFactor that descales to 1", async () => {
       expect(await send(mToken, 'harnessSetReserveFactorFresh', [etherMantissa(1.01)])).toHaveTokenFailure('BAD_INPUT', 'SET_RESERVE_FACTOR_BOUNDS_CHECK');
-      expect(await call(mToken, 'reserveFactorMantissa')).toEqualNumber(0);
+      expect(await call(mToken, 'reserveFactorMantissa')).toEqualNumber(defaultFactor);
     });
 
     it("accepts newReserveFactor in valid range and emits log", async () => {
@@ -49,7 +50,7 @@ describe('#MToken/reserves', function () {
       expect(result).toSucceed();
       expect(await call(mToken, 'reserveFactorMantissa')).toEqualNumber(factor);
       expect(result).toHaveLog("NewReserveFactor", {
-        oldReserveFactorMantissa: '0',
+        oldReserveFactorMantissa: defaultFactor,
         newReserveFactorMantissa: factor.toString(),
       });
     });

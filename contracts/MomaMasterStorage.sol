@@ -28,6 +28,16 @@ contract MomaPoolAdminStorage {
     * @notice Pending brains of MomaPool
     */
     address public pendingMomaMasterImplementation;
+
+    /**
+     * @notice Multiplier used to calculate the maximum repayAmount when liquidating a borrow
+     */
+    uint public closeFactorMantissa = 0.5e18;
+
+    /**
+     * @notice Multiplier representing the discount on collateral that a liquidator receives
+     */
+    uint public liquidationIncentiveMantissa = 1.1e18;
 }
 
 
@@ -37,16 +47,6 @@ contract MomaMasterV1Storage is MomaPoolAdminStorage {
      * @notice Oracle which gives the price of any given asset
      */
     PriceOracle public oracle;
-
-    /**
-     * @notice Multiplier used to calculate the maximum repayAmount when liquidating a borrow
-     */
-    uint public closeFactorMantissa;
-
-    /**
-     * @notice Multiplier representing the discount on collateral that a liquidator receives
-     */
-    uint public liquidationIncentiveMantissa;
 
     /**
      * @notice Max number of assets a single account can participate in (borrow or use as collateral)

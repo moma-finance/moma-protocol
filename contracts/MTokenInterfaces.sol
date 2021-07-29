@@ -73,7 +73,7 @@ contract MTokenStorage {
     /**
      * @notice Fraction of interest currently set aside for reserves
      */
-    uint public reserveFactorMantissa;
+    uint public reserveFactorMantissa = 0.1e18;
 
     /**
      * @notice Block number that interest was last accrued at

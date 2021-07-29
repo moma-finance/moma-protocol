@@ -14,6 +14,8 @@ const {
   setInterestRateModel
 } = require('../Utils/Moma');
 
+const closeFactorMantissa = etherMantissa(0.5);
+
 describe('MomaMaster', () => {
   let root, accounts;
 
@@ -32,7 +34,7 @@ describe('MomaMaster', () => {
     });
 
     it("on success it sets closeFactor as specified", async () => {
-      expect(await call(momaPool, 'closeFactorMantissa')).toEqualNumber(0.051e18);
+      expect(await call(momaPool, 'closeFactorMantissa')).toEqualNumber(closeFactorMantissa);
     });
   });
 
@@ -78,15 +80,31 @@ describe('MomaMaster', () => {
       ).rejects.toRevert('revert only admin can set close factor');
     });
 
+    it("reverts if close factor too small", async () => {
+      const mToken = await makeMToken();
+      await expect(
+        send(mToken.momaPool, '_setCloseFactor', [1])
+      ).rejects.toRevert('revert close factor too small');
+      expect(await call(mToken.momaPool, 'closeFactorMantissa')).toEqualNumber(closeFactorMantissa);
+    });
+
+    it("reverts if close factor too large", async () => {
+      const mToken = await makeMToken();
+      await expect(
+        send(mToken.momaPool, '_setCloseFactor', [etherMantissa(1)])
+      ).rejects.toRevert('revert close factor too large');
+      expect(await call(mToken.momaPool, 'closeFactorMantissa')).toEqualNumber(closeFactorMantissa);
+    });
+
     it("succeeds and set close factor", async () => {
       const mToken = await makeMToken();
-      const result = await send(mToken.momaPool, '_setCloseFactor', [1]);
+      const result = await send(mToken.momaPool, '_setCloseFactor', [etherMantissa(0.1)]);
       expect(result).toSucceed();
       expect(result).toHaveLog('NewCloseFactor', {
-        oldCloseFactorMantissa: etherMantissa(0.051),
-        newCloseFactorMantissa: 1
+        oldCloseFactorMantissa: closeFactorMantissa,
+        newCloseFactorMantissa: etherMantissa(0.1)
       });
-      expect(await call(mToken.momaPool, 'closeFactorMantissa')).toEqualNumber(1);
+      expect(await call(mToken.momaPool, 'closeFactorMantissa')).toEqualNumber(etherMantissa(0.1));
     });
   });
 
@@ -134,8 +152,8 @@ describe('MomaMaster', () => {
   });
 
   describe('_setLiquidationIncentive', () => {
-    const initialIncentive = etherMantissa(1.0);
-    const validIncentive = etherMantissa(1.1);
+    const initialIncentive = etherMantissa(1.1);
+    const validIncentive = etherMantissa(1.2);
     const tooSmallIncentive = etherMantissa(0.99999);
     const tooLargeIncentive = etherMantissa(1.50000001);
 
@@ -148,6 +166,20 @@ describe('MomaMaster', () => {
       const {reply, receipt} = await both(momaPool, '_setLiquidationIncentive', [initialIncentive], {from: accounts[0]});
       expect(reply).toHaveTrollError('UNAUTHORIZED');
       expect(receipt).toHaveTrollFailure('UNAUTHORIZED', 'SET_LIQUIDATION_INCENTIVE_OWNER_CHECK');
+      expect(await call(momaPool, 'liquidationIncentiveMantissa')).toEqualNumber(initialIncentive);
+    });
+
+    it("reverts if liquidation incentive too small", async () => {
+      await expect(
+        send(momaPool, '_setLiquidationIncentive', [tooSmallIncentive])
+      ).rejects.toRevert('revert liquidation incentive too small');
+      expect(await call(momaPool, 'liquidationIncentiveMantissa')).toEqualNumber(initialIncentive);
+    });
+
+    it("reverts if liquidation incentive too large", async () => {
+      await expect(
+        send(momaPool, '_setLiquidationIncentive', [tooLargeIncentive])
+      ).rejects.toRevert('revert liquidation incentive too large');
       expect(await call(momaPool, 'liquidationIncentiveMantissa')).toEqualNumber(initialIncentive);
     });
 
