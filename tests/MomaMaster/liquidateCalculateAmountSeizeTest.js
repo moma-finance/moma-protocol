@@ -62,7 +62,7 @@ describe('#MomaMaster/liquidateCalculate', () => {
     });
 
     it("reverts if it fails to calculate the exchange rate", async () => {
-      await send(mTokenCollateral, 'harnessExchangeRateDetails', [1, 0, 10, 0, 0]); // (1 - 10) -> underflow
+      await send(mTokenCollateral, 'harnessExchangeRateDetails', [9, 0, 10, 0, 0]); // (9 - 10) -> underflow
       await expect(
         send(momaPool, 'liquidateCalculateSeizeTokens', [mTokenBorrowed._address, mTokenCollateral._address, repayAmount])
       ).rejects.toRevert("revert exchangeRateStored: exchangeRateStoredInternal failed");

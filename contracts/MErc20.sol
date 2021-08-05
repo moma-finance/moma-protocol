@@ -31,6 +31,7 @@ contract MErc20 is MToken, MErc20Interface {
         // Set underlying and sanity check it
         underlying = underlying_;
         EIP20Interface(underlying).totalSupply();
+        require(EIP20Interface(underlying).decimals() >= 4, 'MErc20: LOW DECIMALS');
     }
 
     /*** User Interface ***/
