@@ -210,7 +210,7 @@ describe('MToken', function () {
       const mTokenSupply = 1, totalBorrows = 1, totalReserves = 0, totalFees = 0, totalMomaFees = 0;
       await send(mToken, 'harnessExchangeRateDetails', [mTokenSupply, totalBorrows, totalReserves, totalFees, totalMomaFees]);
       const result = await call(mToken, 'exchangeRateStored');
-      expect(result).toEqualNumber(etherMantissa(exchangeRate));
+      expect(result).toEqualNumber(etherMantissa(1));
     });
 
     it("calculates with 2 mTokenSupply and 2 total borrow", async () => {

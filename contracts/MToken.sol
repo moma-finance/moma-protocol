@@ -351,7 +351,7 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
      */
     function exchangeRateStoredInternal() internal view returns (MathError, uint) {
         uint _totalSupply = totalSupply;
-        if (_totalSupply < 2) {
+        if (_totalSupply == 0) {
             /*
              * If there are no tokens minted:
              *  exchangeRate = initialExchangeRate

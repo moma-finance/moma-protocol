@@ -718,8 +718,8 @@ describe('MomaFactory', () => {
         await send(proxy, 'setTokenFeeFactor', [underlying, 0]);
         expect(await call(proxy, 'getMomaFeeFactorMantissa', [pool, underlying])).toEqualNumber(etherExp(0.1));
 
-        await send(proxy, 'setTokenFeeFactor', [underlying, etherExp(0.5)]);
-        expect(await call(proxy, 'getMomaFeeFactorMantissa', [pool, underlying])).toEqualNumber(etherExp(0.5));
+        await send(proxy, 'setTokenFeeFactor', [underlying, etherExp(0.3)]);
+        expect(await call(proxy, 'getMomaFeeFactorMantissa', [pool, underlying])).toEqualNumber(etherExp(0.3));
       });
 
       it('should return 0 if set no fee pool', async () => {
