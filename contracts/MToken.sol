@@ -594,6 +594,7 @@ contract MToken is MTokenInterface, Exponential, TokenErrorReporter {
 
         (vars.mathErr, vars.mintTokens) = divScalarByExpTruncate(vars.actualMintAmount, Exp({mantissa: vars.exchangeRateMantissa}));
         require(vars.mathErr == MathError.NO_ERROR, "MINT_EXCHANGE_CALCULATION_FAILED");
+        require(vars.mintTokens > 0, "MINT_TOKENS_ZERO");
 
         /*
          * We calculate the new total supply of mTokens and minter token balance, checking for overflow:

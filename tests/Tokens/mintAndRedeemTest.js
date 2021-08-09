@@ -110,6 +110,10 @@ describe('#MErc20/mintAndRedeem', function () {
       await expect(mintFresh(mToken, minter, mintAmount)).rejects.toRevert('revert MINT_EXCHANGE_CALCULATION_FAILED');
     });
 
+    it("fails if mint 0 mToken", async () => {
+      await expect(mintFresh(mToken, minter, 1)).rejects.toRevert('revert MINT_TOKENS_ZERO');
+    });
+
     it("fails if transferring in fails", async () => {
       await send(mToken.underlying, 'harnessSetFailTransferFromAddress', [minter, true]);
       await expect(mintFresh(mToken, minter, mintAmount)).rejects.toRevert('revert TOKEN_TRANSFER_IN_FAILED');
